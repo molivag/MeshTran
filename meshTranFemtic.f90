@@ -5,7 +5,7 @@ program setting_fetic
 
   ! Control parameters
   character(len = 256):: dem_file, outdir, dem_units, topography_file, bathymetry_file, coast_line_file
-  character(len = 256), allocatable:: edi_files(:)
+  character(len = 256), allocatable:: edi_files(:), edi_id(:)
   logical:: has_sea
   real(dp):: sea_level
   real(dp):: xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, x0, y0
@@ -37,10 +37,10 @@ program setting_fetic
   call get_edi_file_list(edi_files, n_edi_files)
   n_sites = n_edi_files
 
-  allocate(edi_lat(n_edi_files), edi_lon(n_edi_files), edi_elev(n_edi_files))
+  allocate(edi_id(n_edi_files), edi_lat(n_edi_files), edi_lon(n_edi_files), edi_elev(n_edi_files))
   allocate(site_x(n_edi_files), site_y(n_edi_files), site_z(n_edi_files), fix_elev_site(n_sites))
   ALLOCATE(site_x_km(n_edi_files), site_y_km(n_edi_files))
-  call read_edi_files(edi_files, n_edi_files, edi_lat, edi_lon, edi_elev)
+  call read_edi_files(edi_files, n_edi_files, edi_id, edi_lat, edi_lon, edi_elev)
 
   !---------------------------------------------------
   !     Convert Lat-Long to UTm
@@ -48,7 +48,7 @@ program setting_fetic
   !                                                esto deberia llamarse edi_x y edi_y
   call edi_to_utm(edi_lat, edi_lon, n_edi_files, site_x, site_y, zone)
 
-  call write_dem_sites_utm(dem_units, outdir, site_x, site_y, n_edi_files, dem_x, dem_y, dem_z, n_dem, site_x_km, site_y_km, dem_x_km, dem_y_km)
+  call write_dem_sites_utm(outdir, edi_id, site_x, site_y, n_edi_files, dem_x, dem_y, dem_z, n_dem, site_x_km, site_y_km, dem_x_km, dem_y_km)
 
   dem_x_km = dem_x
   dem_y_km = dem_y
@@ -67,7 +67,7 @@ program setting_fetic
 
 
 
-  call snap_sites_to_dem(site_x, site_y, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
+  call snap_sites_to_dem(edi_id, site_x, site_y, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
 
   ! !Check if DEM cover whole analysis domain+padding area
   call check_domain(dem_x_km, dem_y_km, xminDOM, xmaxDOM, yminDOM, ymaxDOM, pad_x, pad_y)
@@ -367,20 +367,22 @@ end subroutine get_edi_file_list
 !=========================================================
 !=======
 !=========================================================
-subroutine read_edi_files(edi_files, n, edi_lat, edi_lon, edi_elev)
+subroutine read_edi_files(edi_files, n, edi_id, edi_lat, edi_lon, edi_elev)
     implicit none
 
     integer,          intent(in):: n
     character(len=*), intent(in):: edi_files(n)
     real(8), intent(out)         :: edi_lat(n), edi_lon(n), edi_elev(n)
+    character(len=*), intent(out)         :: edi_id(n)
 
-    integer:: i, unit, ios
+    integer:: i, unit, ios, p1, p2
     character(len = 512):: line
 
-    logical:: found_lat, found_lon, found_elev
+    logical:: found_id, found_lat, found_lon, found_elev
 
     do i = 1, n
 
+        found_id  = .false.
         found_lat  = .false.
         found_lon  = .false.
         found_elev = .false.
@@ -390,6 +392,14 @@ subroutine read_edi_files(edi_files, n, edi_lat, edi_lon, edi_elev)
         do
             read(unit, '(A)', iostat = ios) line
             if (ios /= 0) exit
+
+
+            if (index(line, 'DATAID=') > 0) then
+              p1 = index(line,'"')
+              p2 = index(line(p1+1:),'"') + p1
+              edi_id(i) = line(p1+1:p2-1)
+              found_id = .true.
+            end if
 
             if (index(line, 'REFLAT=') > 0) then
                 call parse_ref_value(line, edi_lat(i))
@@ -406,7 +416,7 @@ subroutine read_edi_files(edi_files, n, edi_lat, edi_lon, edi_elev)
                 found_elev = .true.
             end if
 
-            if (found_lat .and. found_lon .and. found_elev) exit
+            if (found_id .and. found_lat .and. found_lon .and. found_elev) exit
         end do
 
         close(unit)
@@ -516,12 +526,13 @@ end subroutine
 !=========================================================
 !=======
 !=========================================================
-subroutine write_dem_sites_utm(units, dir, siteXm, siteYm, nn_sites, demXmts, demYmts, demZmts, nn_dem, siteXkm, siteYkm, demXkm, demYkm)
+subroutine write_dem_sites_utm(dir, ediID, siteXm, siteYm, nn_sites, demXmts, demYmts, demZmts, nn_dem, siteXkm, siteYkm, demXkm, demYkm)
   implicit none
   real(8), intent(in)  :: siteXm(nn_sites), siteYm(nn_sites), demXmts(nn_dem), demYmts(nn_dem), demZmts(nn_dem)
+  character(len=*), intent(in)  :: ediID(nn_sites)
   integer, intent(in)  :: nn_sites, nn_dem
   real(8), intent(out):: siteXkm(nn_sites), siteYkm(nn_sites), demXkm(nn_dem), demYkm(nn_dem)
-  character(len=*), intent(in):: dir, units
+  character(len=*), intent(in):: dir
   integer:: i, iu
 
   siteXkm = siteXm
@@ -538,7 +549,7 @@ subroutine write_dem_sites_utm(units, dir, siteXm, siteYm, nn_sites, demXmts, de
 
   write(iu, '(A)') '# x_km   y_km'
   do i = 1, nn_sites
-     write(iu, '(F15.5, 1X, F15.5)') siteXkm(i), siteYkm(i)
+     write(iu, '(A12, F15.5, 1X, F15.5)') ediID(i), siteXkm(i), siteYkm(i)
   end do
   close(iu)
 
@@ -558,13 +569,14 @@ end subroutine
 !=========================================================
 !=======
 !=========================================================
-subroutine snap_sites_to_dem(site_x, site_y, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
+subroutine snap_sites_to_dem(ediID, site_x, site_y, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
 
   implicit none
   integer, intent(in):: n_sites, n_dem
   real(8), intent(in):: site_x(n_sites), site_y(n_sites)
   real(8), intent(in):: dem_x(n_dem), dem_y(n_dem), dem_z(n_dem)
   real(8), intent(out):: fix_elev_site(n_sites)
+  character(len=*) :: ediID(n_sites)
 
   character(len = 512):: fname
   integer:: i, j, jmin, iu
@@ -601,7 +613,7 @@ subroutine snap_sites_to_dem(site_x, site_y, n_sites, dem_x, dem_y, dem_z, n_dem
   fname = trim(outdir)//'/sites_coord_elev.dat'
   open(newunit = iu, file = fname, status='replace', action='write')
   do i = 1, n_sites
-    write(iu,'(3f15.5)') site_x(i), site_y(i), fix_elev_site(i)/1000.0d0
+    write(iu,'(A12, 3f15.5)') ediID(i), site_x(i), site_y(i), fix_elev_site(i)/1000.0d0
   end do
 
   close(iu)
