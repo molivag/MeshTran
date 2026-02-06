@@ -4,3 +4,4 @@ buildMesh/
 *.dat
 *.ipynb
 *.exe
+meshTranFemtic
