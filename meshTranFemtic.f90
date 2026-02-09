@@ -10,12 +10,13 @@ program setting_fetic
   real(dp):: sea_level
   real(dp):: xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, x0, y0
   real(dp), allocatable:: edi_lat(:), edi_lon(:), edi_elev(:)
-  real(dp):: pad_x, pad_y
+  real(dp):: pad_x, pad_y, rotation
 
   ! DEM data
-  integer:: n_dem, zone, n_edi_files, Nsph, n_sites
+  integer:: n_dem, zone, n_edi_files, Nsph, n_sites, n_elipses,ellipsForSite 
   real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
   real(dp), allocatable:: site_x_km(:), site_y_km(:), dem_x_km(:), dem_y_km(:), radius(:), edges(:)
+  real(dp), allocatable:: maxSiteEdge(:),lenEllipseSite(:)
 
   
   !---------------------------------------------------
@@ -23,7 +24,8 @@ program setting_fetic
   !---------------------------------------------------
   call read_set_femtic('set_control_mesh.dat', dem_file, dem_units, outdir, has_sea, sea_level, &
                     xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, pad_x, pad_y, topography_file, &
-                    bathymetry_file, coast_line_file, Nsph, radius, edges)
+                    bathymetry_file, coast_line_file, Nsph, radius, edges,n_elipses, rotation,&
+                    ellipsForSite, maxSiteEdge,lenEllipseSite)
 
   !---------------------------------------------------
   !     Read Digital Elevation Model
@@ -72,6 +74,8 @@ program setting_fetic
 
   ! !Check if DEM cover whole analysis domain+padding area
   call check_domain(dem_x_km, dem_y_km, xminDOM, xmaxDOM, yminDOM, ymaxDOM, pad_x, pad_y)
+  call tetgen_global_mesh_refinement(0.0d0,0.0d0,n_elipses, rotation, site_x_km, site_y_km,n_edi_files, ellipsForSite, maxSiteEdge,lenEllipseSite)
+  stop
 
   ! !Write files in mesh coordinates centered at anchor point 
   call define_analysis_domain(outdir, xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM)
@@ -90,14 +94,17 @@ contains
 !=========================================================
 subroutine read_set_femtic(fname, dem_file, dem_units, outdir, has_sea, lsea_level, &
                          xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, pad_x, pad_y, &
-                         topography_file, bathymetry_file, coastLine_file, Nsph, radius, edges)
+                         topography_file, bathymetry_file, coastLine_file, Nsph, radius, edges,&
+                         num_glob_elipses, rotation_glob_elipses,n_ellipses_site, maxSiteEdge,lenEllipseSite)
+
   implicit none
   character(len=*), intent(in):: fname
   character(len = 256), intent(out):: dem_file, outdir, dem_units, topography_file, bathymetry_file, coastLine_file
   logical,              intent(out):: has_sea
-  real(dp),             intent(out):: lsea_level, xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, pad_x, pad_y
-  integer,              intent(out):: Nsph
-  real(8), allocatable, INTENT(out):: radius(:), edges(:)
+  real(dp),             intent(out):: lsea_level, xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM
+  real(dp),             intent(out):: pad_x, pad_y, rotation_glob_elipses 
+  integer,              intent(out):: Nsph, num_glob_elipses, n_ellipses_site
+  real(8), allocatable, INTENT(out):: radius(:), edges(:), maxSiteEdge(:),lenEllipseSite(:)
 
   character(len = 256):: line, key, val
   integer:: iu
@@ -120,14 +127,16 @@ subroutine read_set_femtic(fname, dem_file, dem_units, outdir, has_sea, lsea_lev
         case ('OUTDIR');      outdir = trim(val)
         case ('HAS_SEA');     has_sea = (trim(val) == 'YES')
         case ('SEA_LEVEL');   read(val, *) lsea_level
-        case ('XMIN_DOM');        read(val, *) xminDOM
-        case ('XMAX_DOM');        read(val, *) xmaxDOM
-        case ('YMIN_DOM');        read(val, *) yminDOM
-        case ('YMAX_DOM');        read(val, *) ymaxDOM
-        case ('ZMIN_DOM');        read(val, *) zminDOM
-        case ('ZMAX_DOM');        read(val, *) zmaxDOM
+        case ('XMIN_DOM');    read(val, *) xminDOM
+        case ('XMAX_DOM');    read(val, *) xmaxDOM
+        case ('YMIN_DOM');    read(val, *) yminDOM
+        case ('YMAX_DOM');    read(val, *) ymaxDOM
+        case ('ZMIN_DOM');    read(val, *) zminDOM
+        case ('ZMAX_DOM');    read(val, *) zmaxDOM
         case ('PAD_X');       read(val, *) pad_x
-        case ('PAD_Y');       read(val, *) pad_y 
+        case ('PAD_Y');       read(val, *) pad_y
+        case ('ROTATION');    read(val, *) rotation_glob_elipses 
+        case ('NUM_ELIPSES'); read(val, *) num_glob_elipses
         case ('ESFERAS')
           read(val, *) Nsph
           if (allocated(radius)) deallocate(radius)
@@ -145,6 +154,15 @@ subroutine read_set_femtic(fname, dem_file, dem_units, outdir, has_sea, lsea_lev
               stop
            end if
            read(val, *) edges
+        case ('SITE_ELLIPSES')
+          read(val, *) n_ellipses_site
+          ! if (allocated(radius)) deallocate(radius)
+          ! if (allocated(edges))   deallocate(edges)
+          allocate(maxSiteEdge(n_ellipses_site), lenEllipseSite(n_ellipses_site))
+        case ('MAX_EDGE_LEN')
+          read(val,*)maxSiteEdge
+        case ('LEN_ELLIPSE' )
+          read(val,*)lenEllipseSite
     end select
   end do
 
@@ -679,6 +697,7 @@ subroutine write_observing_sites(site_x, site_y, n_sites, outdir, Nsph, edges, r
 
   end do
 
+
   close(iu)
 
 end subroutine write_observing_sites
@@ -813,9 +832,9 @@ end subroutine
 !=========================================================
 subroutine run_makeTetraMesh_and_assign_regions()
   implicit none
-  integer :: stat, iu, iu_in, iu_out
+  integer :: stat, iu_in, iu_out
   logical :: ex, after_part4
-  character(len=512) :: cmd, line
+  character(len=512) :: line
 
 
   ! -----------------------------
@@ -863,8 +882,9 @@ subroutine run_makeTetraMesh_and_assign_regions()
   ! 5. Parchear regiones
   ! -----------------------------
 
-    after_part4 = .false.
+  after_part4 = .false.
 
+  call execute_command_line('echo "Assigning regions in *.poly file"')
   open(newunit=iu_in,  file='buildMesh/output.poly', status='old')
   open(newunit=iu_out, file='buildMesh/output.poly.tmp', status='replace')
 
@@ -881,6 +901,10 @@ subroutine run_makeTetraMesh_and_assign_regions()
       ! ---- REGIONES ----
       write(iu_out,'(I3,3F10.3,I4,1PE12.4)') 1, 0.0, 0.0, -39.0, 10, 1.0e9
       write(iu_out,'(I3,3F10.3,I4,1PE12.4)') 2, 0.0, 0.0,  39.0, 30, 1.0e9
+    else
+      write(*,*) ' There is no #Part 4 content on output.poly where it assign regions'
+      write(*,*) 'Aborting tetgen execution'
+      stop
     end if
   end do
 
@@ -893,7 +917,103 @@ subroutine run_makeTetraMesh_and_assign_regions()
 
   write(*,*) 'OK: makeTetraMesh steps 1–4 done and regions added to output.poly'
 
+  ! -----------------------------
+  ! 6. Runing tetgen on output.poly file
+  ! -----------------------------
+  call execute_command_line('echo "Running tetgen..."', wait=.true.)
+  call execute_command_line('cd buildMesh && tetgen -nVpYAakq3.0/0 output.poly', wait=.true., exitstat=stat)
+  if (stat /= 0) stop 'ERROR: executing tetgen'
+
+
 end subroutine
+!=========================================================
+!=======
+!=========================================================
+subroutine tetgen_global_mesh_refinement(xcenter,ycenter,Nglob_ellipses, rot_glob, corXsite,corYsite,&
+                                        nSites,n_site_ellipses,max_edge_len_within_ellipse,len_alon_x_axis)
+
+
+  implicit none
+  integer, intent(in)   :: Nglob_ellipses
+  real(dp), intent(in)  :: ycenter, xcenter, rot_glob
+  character(len=10)     :: outdir_refi
+  character(len=512)    :: fname
+  real(dp)              :: z0, oblatness_on_ZXplane
+  integer               :: iu, i, nSites, n_site_ellipses, k
+  ! Parámetros hardcodeados (pueden ser arreglos en el futuro)
+  real(dp) :: a(Nglob_ellipses), lengths(Nglob_ellipses), fh(Nglob_ellipses), fvp(Nglob_ellipses), fvm(Nglob_ellipses)
+  real(dp), intent(in) :: len_alon_x_axis(n_site_ellipses),  max_edge_len_within_ellipse(n_site_ellipses)
+  real(dp), intent(in) :: corXsite(nSites), corYsite(nSites)
+  
+
+  z0 = 0.0d0
+  
+  outdir_refi='buildMesh/'
+  
+  ! Datos del ejemplo del autor
+  a =       (/ 40.0, 45.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0 /)
+  lengths = (/  1.0,  1.5,  3.0,  5.0,  8.0,  10.0,  15.0,  20.0,  30.0,  45.0 /)
+  fh =      (/  0.5,  0.5,  0.5,  0.3,  0.2,   0.0,   0.0,   0.0,   0.0,   0.0 /)
+  fvp =     (/  0.7,  0.5,  0.4,  0.3,  0.1,   0.0,   0.0,   0.0,   0.0,   0.0 /)
+  fvm =     (/  0.9,  0.7,  0.7,  0.5,  0.3,   0.0,   0.0,   0.0,   0.0,   0.0 /)
+
+  a = a*1.0d0
+
+  fname = outdir_refi//'makeMtr.param'
+  open(newunit=iu, file=fname, status='replace', action='write')
+
+  ! 1. Coordenadas del centro (Y, X, Z)
+  write(iu, '(3F12.5)') xcenter, ycenter, z0
+  
+  ! 2. Ángulo de rotación
+  write(iu, '(F12.2)') rot_glob
+  
+  ! 3. Número de elipsoides
+  write(iu, '(I5)') Nglob_ellipses
+  
+  ! 4. Bloque de elipsoides
+  do i = 1, min(Nglob_ellipses, 10)
+      write(iu, '(F6.1, F6.1, 1x, 3F6.2)') a(i), lengths(i), fh(i), fvp(i), fvm(i)
+  end do
+
+  close(iu)
+  print *, 'Archivo makeMtr.param creado exitosamente en buildMesh/'
+
+
+ 
+  print'(f6.2)', len_alon_x_axis
+ 
+  oblatness_on_ZXplane = 0.3
+
+  fname = outdir_refi//'/obs_site.dat'
+  open(newunit = iu, file = fname, status='replace', action='write', form='formatted')
+
+  ! ======================
+  ! Write number of sites
+  ! ======================
+  write(iu, '(I4)') nSites
+
+  ! ======================
+  ! Write each observation site
+  ! ======================
+  do i = 1, nSites
+     ! X  Y  z0
+     write(iu, '(3F15.6 )') corXsite(i), corYsite(i), z0
+     write(iu, '(I1)') n_site_ellipses
+
+     ! (Ri, Li) pairs
+     do k = 1, n_site_ellipses 
+      write(iu, '(3F5.2 )') len_alon_x_axis(k), max_edge_len_within_ellipse(k), oblatness_on_zxplane
+     end do
+  end do
+
+  close(iu)
+  print *, 'Archivo obs_site.dat creado exitosamente en buildMesh/'
+
+
+end subroutine tetgen_global_mesh_refinement
+
+
 
 
 
