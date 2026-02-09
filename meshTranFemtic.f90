@@ -48,7 +48,7 @@ program setting_fetic
   !                                                esto deberia llamarse edi_x y edi_y
   call edi_to_utm(edi_lat, edi_lon, n_edi_files, site_x, site_y, zone)
 
-  call write_dem_sites_utm(outdir, edi_id, site_x, site_y, n_edi_files, dem_x, dem_y, dem_z, n_dem, site_x_km, site_y_km, dem_x_km, dem_y_km)
+  call write_dem_sites_utm( edi_id, site_x, site_y, n_edi_files, dem_x, dem_y, dem_z, n_dem, site_x_km, site_y_km, dem_x_km, dem_y_km)
 
   dem_x_km = dem_x
   dem_y_km = dem_y
@@ -63,11 +63,12 @@ program setting_fetic
   !---------------------------------------------------
   !     Recenter
   !---------------------------------------------------
-  call recenter_all(site_x_km, site_y_km, n_edi_files, dem_x_km, dem_y_km, n_dem,  x0, y0)
+  call recenter_all(n_edi_files, n_dem,  x0, y0, site_x_km, site_y_km, dem_x_km, dem_y_km)
+  !a parti de aqui coordenadas de malla
 
 
 
-  call snap_sites_to_dem(edi_id, site_x, site_y, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
+  call snap_sites_to_dem(edi_id, site_x_km, site_y_km, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
 
   ! !Check if DEM cover whole analysis domain+padding area
   call check_domain(dem_x_km, dem_y_km, xminDOM, xmaxDOM, yminDOM, ymaxDOM, pad_x, pad_y)
@@ -77,9 +78,11 @@ program setting_fetic
   call write_topography(topography_file, dem_x_km, dem_y_km, dem_z, n_dem, sea_level, outdir)
   call write_bathymetry(bathymetry_file, dem_x_km, dem_y_km, dem_z, n_dem, sea_level, outdir)
   call write_coast_line(coast_line_file, xminDOM, xmaxDOM, yminDOM, ymaxDOM, outdir)
-  call write_observing_sites(site_x, site_y, n_edi_files, outdir, Nsph, edges, radius)
+  call write_observing_sites(site_x_km, site_y_km, n_edi_files, outdir, Nsph, edges, radius)
 
   print *, 'OK: FEMTIC input files written.'
+
+  call run_makeTetraMesh_and_assign_regions()
 
 contains
 !=========================================================
@@ -512,7 +515,7 @@ end subroutine
 !=========================================================
 !=======
 !=========================================================
-subroutine recenter_all(site_x, site_y, n_sites, dem_x, dem_y, n_dem, x0, y0)
+subroutine recenter_all( n_sites,  n_dem, x0, y0, site_x, site_y, dem_x, dem_y)
   real(8), intent(inout):: site_x(n_sites), site_y(n_sites), dem_x(n_dem), dem_y(n_dem)
   real(8), intent(in)    :: x0, y0
   integer, intent(in)    :: n_sites, n_dem
@@ -526,13 +529,13 @@ end subroutine
 !=========================================================
 !=======
 !=========================================================
-subroutine write_dem_sites_utm(dir, ediID, siteXm, siteYm, nn_sites, demXmts, demYmts, demZmts, nn_dem, siteXkm, siteYkm, demXkm, demYkm)
+subroutine write_dem_sites_utm(ediID, siteXm, siteYm, nn_sites, demXmts, demYmts, demZmts, nn_dem, siteXkm, siteYkm, demXkm, demYkm)
   implicit none
   real(8), intent(in)  :: siteXm(nn_sites), siteYm(nn_sites), demXmts(nn_dem), demYmts(nn_dem), demZmts(nn_dem)
   character(len=*), intent(in)  :: ediID(nn_sites)
   integer, intent(in)  :: nn_sites, nn_dem
   real(8), intent(out):: siteXkm(nn_sites), siteYkm(nn_sites), demXkm(nn_dem), demYkm(nn_dem)
-  character(len=*), intent(in):: dir
+  character(len=11) :: dir
   integer:: i, iu
 
   siteXkm = siteXm
@@ -541,11 +544,13 @@ subroutine write_dem_sites_utm(dir, ediID, siteXm, siteYm, nn_sites, demXmts, de
   demXkm = demXmts
   demYkm = demYmts
 
+  dir = 'input_data/'
+
   
   ! ==========================
   ! Write SITE coordinates
   ! ==========================
-  open(newunit = iu, file = trim(dir)//'sites_utm_km.dat', status='replace', action='write')
+  open(newunit = iu, file = trim(dir)//'pyplots/sites_utm_km.dat', status='replace', action='write')
 
   write(iu, '(A)') '# x_km   y_km'
   do i = 1, nn_sites
@@ -556,7 +561,7 @@ subroutine write_dem_sites_utm(dir, ediID, siteXm, siteYm, nn_sites, demXmts, de
   ! ==========================
   ! Write DEM coordinates
   ! ==========================
-  open(newunit = iu, file = trim(dir)//'dem_utm_km.dat', status='replace', action='write')
+  open(newunit = iu, file = trim(dir)//'pyplots/dem_utm_km.dat', status='replace', action='write')
 
   write(iu, '(A)') '# x_km   y_km   z_m'
   do i = 1, nn_dem
@@ -772,10 +777,10 @@ subroutine write_coast_line(coast_line_file, xmin, xmax, ymin, ymax, outdir)
   if (.not. has_sea) then
     open(newunit = iu, file = trim(outdir)//coast_line_file, status='replace')
     write(iu, *) 1
-    write(iu, '(2(F21.15, 1X), 2I2)') ymin, xmin, 0, 0
-    write(iu, '(2(F21.15, 1X), 2I2)') ymin, xmax, 0, 0
-    write(iu, '(2(F21.15, 1X), 2I2)') ymax, xmax, 0, 0
-    write(iu, '(2(F21.15, 1X), 2I2)') ymax, xmin, 1, 0
+    write(iu, '(2(F21.15, 1X), 2I2)') xmin-5.0d0, ymin-5.0d0, 0, 0
+    write(iu, '(2(F21.15, 1X), 2I2)') xmax+5.0d0, ymin-5.0d0, 0, 0
+    write(iu, '(2(F21.15, 1X), 2I2)') xmax+5.0d0, ymax+5.0d0, 0, 0
+    write(iu, '(2(F21.15, 1X), 2I2)') xmin-5.0d0, ymax+5.0d0, 1, 0
     close(iu)
   else
      stop 'Sea case not implemented yet'
@@ -806,12 +811,90 @@ end subroutine
 !=========================================================
 !=======
 !=========================================================
-! subroutine control_file()
+subroutine run_makeTetraMesh_and_assign_regions()
+  implicit none
+  integer :: stat, iu, iu_in, iu_out
+  logical :: ex, after_part4
+  character(len=512) :: cmd, line
 
 
-!   write(iu, *) CENTER 
-!   write(iu, *)
+  ! -----------------------------
+  ! 1. Ir a buildMesh
+  ! -----------------------------
+  ! call execute_command_line('cd buildMesh', wait=.true., exitstat=stat)
+  ! if (stat /= 0) stop 'ERROR: cannot cd to buildMesh'
+
+  ! -----------------------------
+  ! 2. Copiar geometría
+  ! -----------------------------
+  call execute_command_line('echo " "')
+  call execute_command_line('echo "--Running makeTetraMesh..."')
+  call execute_command_line('cd buildMesh && cp ../input_data/geometry/* .', &
+                            wait=.true., exitstat=stat)
+  if (stat /= 0) stop 'ERROR: copying geometry failed'
+  call execute_command_line('echo " "')
+
+  ! -----------------------------
+  ! 3. Ejecutar steps 1–4
+  ! -----------------------------
+  call execute_command_line('echo "step 1..."')
+  call execute_command_line('cd buildMesh && makeTetraMesh -stp 1', wait=.true., exitstat=stat)
+  if (stat /= 0) stop 'ERROR: makeTetraMesh step 1 failed'
+
+  call execute_command_line('echo "step 2 --> Building 2D mesh..."')
+  call execute_command_line('cd buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
+  if (stat /= 0) stop 'ERROR: makeTetraMesh step 2 failed'
+
+  call execute_command_line('echo "step 3 --> Interpolating altitudes"')
+  call execute_command_line('cd buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
+  if (stat /= 0) stop 'ERROR: makeTetraMesh step 3 failed'
+
+  call execute_command_line('echo "step 4 --> Making surface mesh"')
+  call execute_command_line('cd buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
+  if (stat /= 0) stop 'ERROR: makeTetraMesh step 4 failed'
+
+  ! -----------------------------
+  ! 4. Verificar output.poly
+  ! -----------------------------
+  inquire(file='buildMesh/output.poly', exist=ex)
+  if (.not. ex) stop 'ERROR: output.poly was not generated'
+
+  ! -----------------------------
+  ! 5. Parchear regiones
+  ! -----------------------------
+
+    after_part4 = .false.
+
+  open(newunit=iu_in,  file='buildMesh/output.poly', status='old')
+  open(newunit=iu_out, file='buildMesh/output.poly.tmp', status='replace')
 
 
-! end program setting_fetic
+  do
+    read(iu_in, '(A)', end=100) line
+
+    write(iu_out, '(A)') trim(line)
+
+    if (index(line, '# Part 4') > 0) then
+      read(iu_in, '(A)') line   ! esta es la línea "0"
+      write(iu_out, '(I0)') 2   ! número de regiones
+
+      ! ---- REGIONES ----
+      write(iu_out,'(I3,3F10.3,I4,1PE12.4)') 1, 0.0, 0.0, -39.0, 10, 1.0e9
+      write(iu_out,'(I3,3F10.3,I4,1PE12.4)') 2, 0.0, 0.0,  39.0, 30, 1.0e9
+    end if
+  end do
+
+100 continue
+  close(iu_in)
+  close(iu_out)
+
+  call execute_command_line('mv buildMesh/output.poly.tmp buildMesh/output.poly')
+
+
+  write(*,*) 'OK: makeTetraMesh steps 1–4 done and regions added to output.poly'
+
+end subroutine
+
+
+
 end program setting_fetic
