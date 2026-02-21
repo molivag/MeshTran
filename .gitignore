@@ -6,5 +6,7 @@ _buildMesh2/
 *.dat
 *.ipynb
 *.exe
+*.mod
 meshTranPreprocessing
-set_meshtran.io
+
+# set_meshtran.io
