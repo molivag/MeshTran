@@ -1,7 +1,10 @@
 input_data/
 buildMesh/
+_buildMesh1/
+_buildMesh2/
 *.xyz
 *.dat
 *.ipynb
 *.exe
-meshTranFemtic
+meshTranPreprocessing
+set_meshtran.io
