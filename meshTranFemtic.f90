@@ -1,4 +1,4 @@
-program setting_fetic
+program femtic_mesh_driver
 
   implicit none
   integer, parameter:: dp = kind(1.0d0)
@@ -13,19 +13,22 @@ program setting_fetic
   real(dp):: pad_x, pad_y, rotation
 
   ! DEM data
-  integer:: n_dem, zone, n_edi_files, Nsph, n_sites, n_elipses,ellipsForSite 
+  integer:: n_dem, zone, n_edi_files, Nsph, n_sites, n_elipses,ellipsForSite, NparamEsfer,Nregions, refi_tetgen
   real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
   real(dp), allocatable:: site_x_km(:), site_y_km(:), dem_x_km(:), dem_y_km(:), radius(:), edges(:)
-  real(dp), allocatable:: maxSiteEdge(:),lenEllipseSite(:)
+  real(dp), allocatable:: maxSiteEdge(:),lenEllipseSite(:),edgesForEsfer(:),radiusForEsfer(:)
+  real(dp), allocatable:: coordinate_regions(:,:), rhoOFregions(:)
+  integer, allocatable :: repeatPartition(:),isRHOfix(:), IDregions(:)
 
   
   !---------------------------------------------------
   !     Read input configutation file
   !---------------------------------------------------
-  call read_set_femtic('set_control_mesh.dat', dem_file, dem_units, outdir, has_sea, sea_level, &
+  call read_set_femtic('set_control_mesh.cpp', dem_file, dem_units, outdir, has_sea, sea_level, &
                     xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, pad_x, pad_y, topography_file, &
                     bathymetry_file, coast_line_file, Nsph, radius, edges,n_elipses, rotation,&
-                    ellipsForSite, maxSiteEdge,lenEllipseSite)
+                    ellipsForSite, maxSiteEdge,lenEllipseSite,NparamEsfer,edgesForEsfer,radiusForEsfer, &
+                    Nregions, coordinate_regions,IDregions,rhoOFregions, repeatPartition,isRHOfix, refi_tetgen)
 
   !---------------------------------------------------
   !     Read Digital Elevation Model
@@ -38,7 +41,6 @@ program setting_fetic
   !---------------------------------------------------
   call get_edi_file_list(edi_files, n_edi_files)
   n_sites = n_edi_files
-
   allocate(edi_id(n_edi_files), edi_lat(n_edi_files), edi_lon(n_edi_files), edi_elev(n_edi_files))
   allocate(site_x(n_edi_files), site_y(n_edi_files), site_z(n_edi_files), fix_elev_site(n_sites))
   ALLOCATE(site_x_km(n_edi_files), site_y_km(n_edi_files))
@@ -68,14 +70,10 @@ program setting_fetic
   call recenter_all(n_edi_files, n_dem,  x0, y0, site_x_km, site_y_km, dem_x_km, dem_y_km)
   !a parti de aqui coordenadas de malla
 
-
-
   call snap_sites_to_dem(edi_id, site_x_km, site_y_km, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
 
   ! !Check if DEM cover whole analysis domain+padding area
   call check_domain(dem_x_km, dem_y_km, xminDOM, xmaxDOM, yminDOM, ymaxDOM, pad_x, pad_y)
-  call tetgen_global_mesh_refinement(0.0d0,0.0d0,n_elipses, rotation, site_x_km, site_y_km,n_edi_files, ellipsForSite, maxSiteEdge,lenEllipseSite)
-  stop
 
   ! !Write files in mesh coordinates centered at anchor point 
   call define_analysis_domain(outdir, xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM)
@@ -84,9 +82,13 @@ program setting_fetic
   call write_coast_line(coast_line_file, xminDOM, xmaxDOM, yminDOM, ymaxDOM, outdir)
   call write_observing_sites(site_x_km, site_y_km, n_edi_files, outdir, Nsph, edges, radius)
 
-  print *, 'OK: FEMTIC input files written.'
 
-  call run_makeTetraMesh_and_assign_regions()
+  call setGlobalMeshRefinement(outdir,0.0d0,0.0d0,n_elipses, rotation, site_x_km, site_y_km,n_edi_files, ellipsForSite, maxSiteEdge,lenEllipseSite)
+  call resistivitty_attribute(outdir, n_sites, site_x_km, site_y_km, fix_elev_site,NparamEsfer,edgesForEsfer,radiusForEsfer, Nregions,IDregions,rhoOFregions, repeatPartition ,isRHOfix)
+
+  ! call run_makeTetraMesh_and_assign_regions(Nregions,coordinate_regions,IDregions)
+  ! call run_TETGEN_and_refine_mesh(refi_tetgen)
+  call run_TetGen2Femtic(refi_tetgen)
 
 contains
 !=========================================================
@@ -95,7 +97,8 @@ contains
 subroutine read_set_femtic(fname, dem_file, dem_units, outdir, has_sea, lsea_level, &
                          xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, pad_x, pad_y, &
                          topography_file, bathymetry_file, coastLine_file, Nsph, radius, edges,&
-                         num_glob_elipses, rotation_glob_elipses,n_ellipses_site, maxSiteEdge,lenEllipseSite)
+                         num_glob_elipses, rotation_glob_elipses,n_ellipses_site, maxSiteEdge,lenEllipseSite, &
+                         NparEsfer,edge_esfer,rad_esfer,Nregions, coord_regions, regionsID, rho_regions, repeat_Partition,is_rho_fix, refi_tetgen)
 
   implicit none
   character(len=*), intent(in):: fname
@@ -103,11 +106,14 @@ subroutine read_set_femtic(fname, dem_file, dem_units, outdir, has_sea, lsea_lev
   logical,              intent(out):: has_sea
   real(dp),             intent(out):: lsea_level, xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM
   real(dp),             intent(out):: pad_x, pad_y, rotation_glob_elipses 
-  integer,              intent(out):: Nsph, num_glob_elipses, n_ellipses_site
-  real(8), allocatable, INTENT(out):: radius(:), edges(:), maxSiteEdge(:),lenEllipseSite(:)
+  integer,              intent(out):: Nsph, num_glob_elipses, n_ellipses_site, NparEsfer, Nregions, refi_tetgen
+  integer, allocatable, intent(out):: repeat_Partition(:), is_rho_fix(:), regionsID(:)
+  real(8), allocatable, INTENT(out):: radius(:), edges(:), maxSiteEdge(:),lenEllipseSite(:), edge_esfer(:), rad_esfer(:)
+  real(8), allocatable, INTENT(out):: coord_regions(:,:), rho_regions(:) 
 
-  character(len = 256):: line, key, val
-  integer:: iu
+  real(8), allocatable  :: temp_vec(:)
+  character(len = 256)  :: line, key, val
+  integer               :: iu
 
 
   open(newunit = iu, file = fname, status='old')
@@ -143,26 +149,91 @@ subroutine read_set_femtic(fname, dem_file, dem_units, outdir, has_sea, lsea_lev
           if (allocated(edges))   deallocate(edges)
           allocate(radius(Nsph), edges(Nsph))
         case ('RADIOS')
-           if (.not. allocated(radius)) then
-              write(*,*) 'ERROR: RADIOS defined before ESFERAS'
-              stop
-           end if
-           read(val, *) radius
+          if (.not. allocated(radius)) then
+             write(*,*) 'ERROR: RADIOS defined before ESFERAS'
+             stop
+          end if
+          read(val, *) radius
         case ('EDGES')
-           if (.not. allocated(edges)) then
-              write(*,*) 'ERROR: EDGES defined before ESFERAS'
-              stop
-           end if
-           read(val, *) edges
+          if (.not. allocated(edges)) then
+             write(*,*) 'ERROR: EDGES defined before ESFERAS'
+             stop
+          end if
+          read(val, *) edges
         case ('SITE_ELLIPSES')
           read(val, *) n_ellipses_site
-          ! if (allocated(radius)) deallocate(radius)
-          ! if (allocated(edges))   deallocate(edges)
+          if (allocated(maxSiteEdge)) deallocate(maxSiteEdge)
+          if (allocated(lenEllipseSite))   deallocate(lenEllipseSite)
           allocate(maxSiteEdge(n_ellipses_site), lenEllipseSite(n_ellipses_site))
         case ('MAX_EDGE_LEN')
           read(val,*)maxSiteEdge
         case ('LEN_ELLIPSE' )
           read(val,*)lenEllipseSite
+
+
+        case ('PARAM_ESFER')
+          read(val, *) NparEsfer
+          if (allocated(rad_esfer)) deallocate(rad_esfer)
+          if (allocated(edge_esfer))   deallocate(edge_esfer)
+          allocate(rad_esfer(NparEsfer), edge_esfer(NparEsfer))
+
+        case ('PARAM_RADIOS')
+          if (.not. allocated(rad_esfer)) then
+             write(*,*) 'ERROR: EDGES defined before ESFERAS'
+             stop
+          end if
+          read(val, *) rad_esfer
+        case ('PARAM_EDGES')
+          if (.not. allocated(edge_esfer)) then
+             write(*,*) 'ERROR: EDGES defined before ESFERAS'
+             stop
+          end if
+          read(val, *) edge_esfer
+
+        case ('REGIONS')
+          read(val, *) Nregions 
+          if (allocated(coord_regions)) deallocate(coord_regions)
+          if (allocated(regionsID))   deallocate(regionsID)
+          if (allocated(rho_regions))   deallocate(rho_regions)
+          allocate(regionsID(Nregions), rho_regions(Nregions))
+          allocate(repeat_Partition(Nregions), is_rho_fix(Nregions))
+          allocate(coord_regions(3, Nregions)) 
+          allocate(temp_vec(3 * Nregions))
+        case ('LOCATION')
+          if (.not. allocated(coord_regions)) then
+             write(*,*) 'ERROR: EDGES defined before ESFERAS'
+             stop
+          end if
+          read(val, *) temp_vec 
+          coord_regions = reshape(temp_vec, (/3, Nregions/))
+          deallocate(temp_vec)
+        case ('ID_REGION')
+          if (.not. allocated(regionsID)) then
+             write(*,*) 'ERROR: EDGES defined before REGIONS'
+             stop
+          end if
+          read(val, *) regionsID
+        case ('RHO_REGIONS')
+          if (.not. allocated(rho_regions)) then
+            write(*,*) 'ERROR: EDGES defined before REGIONS'
+            stop
+          end if
+          read(val, *) rho_regions
+
+        case ('REP_PARTITION')
+          if (.not. allocated(repeat_Partition)) then
+            write(*,*) 'ERROR: EDGES defined before REGIONS'
+            stop
+          end if
+          read(val, *) repeat_Partition
+
+        case ('FIX_RESISTIVITY')
+          if (.not. allocated(is_rho_fix)) then
+            write(*,*) 'ERROR: FIX_RESISTIVITY defined before REGIONS'
+            stop
+          end if
+          read(val, *) is_rho_fix
+        case ('TET_REFINEMENT'); read(val, *) refi_tetgen
     end select
   end do
 
@@ -568,7 +639,7 @@ subroutine write_dem_sites_utm(ediID, siteXm, siteYm, nn_sites, demXmts, demYmts
   ! ==========================
   ! Write SITE coordinates
   ! ==========================
-  open(newunit = iu, file = trim(dir)//'pyplots/sites_utm_km.dat', status='replace', action='write')
+  open(newunit = iu, file = trim(dir)//'PlotWithPython/sites_utm_km.dat', status='replace', action='write')
 
   write(iu, '(A)') '# x_km   y_km'
   do i = 1, nn_sites
@@ -579,7 +650,7 @@ subroutine write_dem_sites_utm(ediID, siteXm, siteYm, nn_sites, demXmts, demYmts
   ! ==========================
   ! Write DEM coordinates
   ! ==========================
-  open(newunit = iu, file = trim(dir)//'pyplots/dem_utm_km.dat', status='replace', action='write')
+  open(newunit = iu, file = trim(dir)//'PlotWithPython/dem_utm_km.dat', status='replace', action='write')
 
   write(iu, '(A)') '# x_km   y_km   z_m'
   do i = 1, nn_dem
@@ -830,10 +901,14 @@ end subroutine
 !=========================================================
 !=======
 !=========================================================
-subroutine run_makeTetraMesh_and_assign_regions()
+subroutine run_makeTetraMesh_and_assign_regions(N_regions,coord_regions,ID_regions)
   implicit none
-  integer :: stat, iu_in, iu_out
-  logical :: ex, after_part4
+
+  integer, intent(in) :: N_regions, ID_regions(N_regions)
+  real(8), intent(in) :: coord_regions(3,N_regions)
+
+  integer :: stat, iu_in, iu_out, k
+  logical :: ex, found_part4
   character(len=512) :: line
 
 
@@ -856,21 +931,33 @@ subroutine run_makeTetraMesh_and_assign_regions()
   ! -----------------------------
   ! 3. Ejecutar steps 1–4
   ! -----------------------------
-  call execute_command_line('echo "step 1..."')
+  call execute_command_line('echo "step 1 --> Defining Land/Sea Boundary"')
   call execute_command_line('cd buildMesh && makeTetraMesh -stp 1', wait=.true., exitstat=stat)
-  if (stat /= 0) stop 'ERROR: makeTetraMesh step 1 failed'
+  if (stat /= 0) then 
+    error stop 'ERROR: makeTetraMesh step 1 failed'
+  endif
+  call execute_command_line('echo "done..." && sleep 1')
 
   call execute_command_line('echo "step 2 --> Building 2D mesh..."')
   call execute_command_line('cd buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
-  if (stat /= 0) stop 'ERROR: makeTetraMesh step 2 failed'
+  if (stat /= 0) then 
+    error stop 'ERROR: makeTetraMesh step 2 failed'
+  endif
+  call execute_command_line('echo "done..." && sleep 1')
 
   call execute_command_line('echo "step 3 --> Interpolating altitudes"')
   call execute_command_line('cd buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
-  if (stat /= 0) stop 'ERROR: makeTetraMesh step 3 failed'
+  if (stat /= 0) then 
+    error stop 'ERROR: makeTetraMesh step 3 failed'
+  endif
+  call execute_command_line('echo "done..." && sleep 1')
 
   call execute_command_line('echo "step 4 --> Making surface mesh"')
   call execute_command_line('cd buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
-  if (stat /= 0) stop 'ERROR: makeTetraMesh step 4 failed'
+  if (stat /= 0) then 
+    error stop 'ERROR: makeTetraMesh step 4 failed'
+  endif
+  call execute_command_line('echo "done..." && sleep 1')
 
   ! -----------------------------
   ! 4. Verificar output.poly
@@ -882,61 +969,89 @@ subroutine run_makeTetraMesh_and_assign_regions()
   ! 5. Parchear regiones
   ! -----------------------------
 
-  after_part4 = .false.
+  ! after_part4 = .false.
+  found_part4 = .false.
 
-  call execute_command_line('echo "Assigning regions in *.poly file"')
+  call execute_command_line('echo " " ')
+  call execute_command_line('echo "Assigning regions in output.poly file"')
   open(newunit=iu_in,  file='buildMesh/output.poly', status='old')
   open(newunit=iu_out, file='buildMesh/output.poly.tmp', status='replace')
 
 
-  do
-    read(iu_in, '(A)', end=100) line
+  ! do
+  !   read(iu_in, '(A)', end=100) line
 
-    write(iu_out, '(A)') trim(line)
+  !   write(iu_out, '(A)') trim(line)
 
-    if (index(line, '# Part 4') > 0) then
-      read(iu_in, '(A)') line   ! esta es la línea "0"
-      write(iu_out, '(I0)') 2   ! número de regiones
+  !   if (index(line, '# Part 4') > 0) then
+  !     read(iu_in, '(A)') line   ! esta es la línea "0"
+  !     write(iu_out, '(I0)') 2   ! número de regiones
 
-      ! ---- REGIONES ----
-      write(iu_out,'(I3,3F10.3,I4,1PE12.4)') 1, 0.0, 0.0, -39.0, 10, 1.0e9
-      write(iu_out,'(I3,3F10.3,I4,1PE12.4)') 2, 0.0, 0.0,  39.0, 30, 1.0e9
-    else
-      write(*,*) ' There is no #Part 4 content on output.poly where it assign regions'
-      write(*,*) 'Aborting tetgen execution'
-      stop
-    end if
-  end do
+  !     ! ---- REGIONES ----
+  !     do k =1,Nregions
+  !       write(iu_out,'(I3,3F10.3,I4,1PE12.4)') k , coord_regions(:,k) , ID_regions(k), 1.0e9
+  !     enddo
+  !   else
+  !     write(*,*) ' There is no #Part 4 content on output.poly where it assign regions'
+  !     write(*,*) 'Aborting tetgen execution'
+  !     stop
+  !   end if
+  ! end do
+
+
+do
+  read(iu_in, '(A)', end=100) line
+
+  write(iu_out, '(A)') trim(line)
+
+  if (index(line, '# Part 4') > 0) then
+     found_part4 = .true.
+
+     read(iu_in, '(A)') line   ! leer el "0"
+     write(iu_out, '(I0)') Nregions
+
+     do k = 1, Nregions
+        write(iu_out,'(I3,3F10.3,I4,1PE12.4)') k, coord_regions(:,k), ID_regions(k), 1.0e9
+     end do
+  end if
+
+end do
 
 100 continue
+
+if (.not. found_part4) then
+   write(*,*) 'There is no # Part 4 section in output.poly'
+   error stop
+end if
+
+
+
+
+
+
+
+
+
   close(iu_in)
   close(iu_out)
 
   call execute_command_line('mv buildMesh/output.poly.tmp buildMesh/output.poly')
 
 
-  write(*,*) 'OK: makeTetraMesh steps 1–4 done and regions added to output.poly'
+  write(*,*) 'Ok: ✅ makeTetraMesh steps 1–4 done and regions added to output.poly'
 
-  ! -----------------------------
-  ! 6. Runing tetgen on output.poly file
-  ! -----------------------------
-  call execute_command_line('echo "Running tetgen..."', wait=.true.)
-  call execute_command_line('cd buildMesh && tetgen -nVpYAakq3.0/0 output.poly', wait=.true., exitstat=stat)
-  if (stat /= 0) stop 'ERROR: executing tetgen'
-
-
-end subroutine
+end subroutine run_makeTetraMesh_and_assign_regions
 !=========================================================
 !=======
 !=========================================================
-subroutine tetgen_global_mesh_refinement(xcenter,ycenter,Nglob_ellipses, rot_glob, corXsite,corYsite,&
+subroutine setGlobalMeshRefinement(outdir_refi,xcenter,ycenter,Nglob_ellipses, rot_glob, corXsite,corYsite,&
                                         nSites,n_site_ellipses,max_edge_len_within_ellipse,len_alon_x_axis)
 
 
   implicit none
+  character(len=*), intent(in):: outdir_refi
   integer, intent(in)   :: Nglob_ellipses
   real(dp), intent(in)  :: ycenter, xcenter, rot_glob
-  character(len=10)     :: outdir_refi
   character(len=512)    :: fname
   real(dp)              :: z0, oblatness_on_ZXplane
   integer               :: iu, i, nSites, n_site_ellipses, k
@@ -948,7 +1063,6 @@ subroutine tetgen_global_mesh_refinement(xcenter,ycenter,Nglob_ellipses, rot_glo
 
   z0 = 0.0d0
   
-  outdir_refi='buildMesh/'
   
   ! Datos del ejemplo del autor
   a =       (/ 40.0, 45.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0 /)
@@ -959,7 +1073,7 @@ subroutine tetgen_global_mesh_refinement(xcenter,ycenter,Nglob_ellipses, rot_glo
 
   a = a*1.0d0
 
-  fname = outdir_refi//'makeMtr.param'
+  fname = trim(outdir_refi)//'makeMtr.param'
   open(newunit=iu, file=fname, status='replace', action='write')
 
   ! 1. Coordenadas del centro (Y, X, Z)
@@ -980,12 +1094,9 @@ subroutine tetgen_global_mesh_refinement(xcenter,ycenter,Nglob_ellipses, rot_glo
   print *, 'Archivo makeMtr.param creado exitosamente en buildMesh/'
 
 
- 
-  print'(f6.2)', len_alon_x_axis
- 
   oblatness_on_ZXplane = 0.3
 
-  fname = outdir_refi//'/obs_site.dat'
+  fname = trim(outdir_refi)//'/obs_site.dat'
   open(newunit = iu, file = fname, status='replace', action='write', form='formatted')
 
   ! ======================
@@ -1011,10 +1122,207 @@ subroutine tetgen_global_mesh_refinement(xcenter,ycenter,Nglob_ellipses, rot_glo
   print *, 'Archivo obs_site.dat creado exitosamente en buildMesh/'
 
 
-end subroutine tetgen_global_mesh_refinement
+end subroutine setGlobalMeshRefinement
+!=========================================================
+!=======
+!=========================================================
+subroutine resistivitty_attribute(out_dir, Nsites, coorXsite, coorYsite, coorZsite,&
+                                  N_paramEsfer,esferEdges,radiusEsfer,N_regions,ID_regions,rhoRegions, repRegion, fixed)
+
+  implicit none
+
+  ! ======================
+  ! Inputs
+  ! ======================
+  character(len=*), intent(in):: out_dir
+  integer, intent(in) :: Nsites, N_regions, N_paramEsfer
+  real(8), intent(in) :: coorXsite(Nsites), coorYsite(Nsites), coorZsite(Nsites)
+  real(8), intent(in) :: esferEdges(N_paramEsfer), radiusEsfer(N_paramEsfer)
+  real(8), intent(in) :: rhoRegions(N_regions)
+  integer, intent(in) :: repRegion(N_regions), fixed(N_regions), ID_regions(N_regions)
+
+  ! ======================
+  ! Local variables
+  ! ======================
+  integer :: iu, i, j
+  character(len=512) :: fname
+  
+  ! Parámetros para la Parte 2 (Elipsoides Regionales)
+  integer, parameter :: Ne = 9
+  real(8) :: a_reg(Ne), len_reg(Ne), fh_reg(Ne), fv_reg(Ne)
+  
+  ! Datos del ejemplo de Usui para la Parte 2
+  a_reg   = (/ 40.0, 45.0, 50.0, 60.0, 100.0, 200.0, 300.0, 500.0, 1000.0 /)
+  len_reg = (/  2.0,  3.0,  5.0, 10.0, 100.0, 200.0, 300.0, 500.0, 1000.0 /)
+  fh_reg  = (/  0.5,  0.5,  0.4,  0.3,   0.0,   0.0,   0.0,   0.0,    0.0 /)
+  fv_reg  = (/  0.7,  0.7,  0.7,  0.6,   0.5,   0.3,   0.2,   0.1,    0.0 /)
+
+  fname = trim(out_dir)//'resistivity_attr.dat'
+  open(newunit=iu, file=fname, status='replace', action='write')
+
+  ! -----------------------------------------------------------
+  ! PARTE 1: Atributos de Región (Nreg = 3: Aire, Mar, Subsuelo)
+  ! Formato: ID  Resistividad  RepeatNumber  FixFlag
+  ! -----------------------------------------------------------
+  write(iu, '(I2)') N_regions
+  do j=1,N_regions
+    write(iu, '(I0, 2X, ES10.3, 1X, I3, 1X, I3)') ID_regions(j), rhoRegions(j), repRegion(j), fixed(j)
+  enddo
+
+  ! -----------------------------------------------------------
+  ! PARTE 2: Elipsoides de Control Regional
+  ! -----------------------------------------------------------
+  write(iu, '(3F12.4)') 0.0, 0.0, 0.0  ! Centro (Y, X, Z) en km
+  write(iu, '(F12.4)') 0.0            ! Rotación (grados)
+  write(iu, '(I0)') Ne                ! Número de elipsoides
+  do i = 1, Ne
+      write(iu, '(F10.1, F10.1, 2F8.2)') a_reg(i), len_reg(i), fh_reg(i), fv_reg(i)
+  end do
+
+  ! -----------------------------------------------------------
+  ! PARTE 3: Refinamiento Local por Puntos (Estaciones)
+  ! -----------------------------------------------------------
+  write(iu, '(I0)') Nsites           ! Número de estaciones
+  do i = 1, Nsites
+      ! Coordenadas (X, Y, Z) en km. Nota: Z viene en metros en tu código.
+      write(iu, '(3(F0.6,2x))') coorXsite(i), coorYsite(i), coorZsite(i)
+      
+      ! Número de esferas por sitio (Ejemplo: 2 esferas)
+      write(iu, '(I0)') N_paramEsfer
+      ! Formato: Radio_km  len_km
+      do j = 1, N_paramEsfer
+        write(iu, '(F5.1, 1X, F5.1)') radiusEsfer(j), esferEdges(j)
+      enddo
+
+  end do
+
+  close(iu)
+  print *, 'OK: resistivity_attr.dat escrito exitosamente'
+
+end subroutine
+!=========================================================
+!=======
+!=========================================================
+subroutine run_TETGEN_and_refine_mesh(Nref)
+  implicit none
+
+  integer, intent(in) :: Nref
+  integer :: r, stat
+  character(len=512) :: cmd
+
+  ! -----------------------------
+  ! Runing tetgen on output.poly file
+  ! -----------------------------
+  call execute_command_line('echo " "')
+  call execute_command_line('echo "running tetgen --> Building 2D Mesh including topography"')
+  call execute_command_line('cd buildMesh && tetgen -nVpYAakq3.0/0 output.poly', wait=.true., exitstat=stat)
+  if (stat /= 0) then 
+    error stop 'ERROR: tetgen execution failed'
+  endif
+  call execute_command_line(' cd buildMesh && head output.1.ele')
+  call execute_command_line('echo "done..." && sleep 3')
+  call execute_command_line('echo " " ')
+
+  call execute_command_line('echo " Preparing mesh refinement " && cd buildMesh && mkdir -p refinement', wait=.true., exitstat=stat)
+  if (stat /= 0) error stop 'ERROR: could not create refinement directory'
+
+
+  ! inquire(file='buildMesh/refinement', exist=dir_exists)
+  ! if (dir_exists) then
+  !     write(*,*) 'Refinement directory successfully created.'
+  ! else
+  !     error stop 'ERROR: refinement directory does not exist.'
+  ! endif
+
+  call execute_command_line('cd buildMesh && cp output.1* refinement')
+  pause
+  call execute_command_line('cd buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
+  if (stat /= 0) stop 'ERROR: there is no files content refinement parameters'
+
+  ! --------------------------------------------------
+  ! Iterative refinement 
+  ! for i in 1 2 ... Nref
+  ! --------------------------------------------------
+  do r = 1, Nref-1
+
+    write(cmd,'(A,I0,A)') 'cd buildMesh/refinement && head output.', r,'.ele'
+    call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+    write(*,'(A,I0)') 'Refinement iteration: ', r
+    pause
+    ! makeMtr output.$r
+    write(cmd,'(A,I0)') 'cd buildMesh/refinement && makeMtr output.', r
+    call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+    if (stat /= 0) error stop 'ERROR in makeMtr'
+    ! tetgen ... output.$r
+    write(cmd,'(A,I0)') 'cd buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', r
+    call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+    if (stat /= 0) error stop 'ERROR in tetgen refinement'
+
+  end do
+
+  call execute_command_line('echo "Refinement done..." && sleep 1')
 
 
 
+end subroutine run_TETGEN_and_refine_mesh
+!=========================================================
+!=======
+!=========================================================
+subroutine run_TetGen2Femtic(Nref)
+  implicit none
+
+  integer, intent(in) :: Nref
+  character(len=256) :: cmd, fname
+  integer :: stat
+  logical :: ex1, ex2, ex3
+
+  call execute_command_line('echo " "')
+  call execute_command_line('echo "Final step: tetgen2femtic execution"')
+  call execute_command_line('cd buildMesh && mkdir -p tetgenTOfemtic',wait=.true.,exitstat=stat)
+  if (stat /= 0) then 
+    error stop 'ERROR: could not be created tetgenTOfemtic directory'
+  endif
+  ! Copiar el último refinement
+  write(cmd,'(A,I0,A)') 'cd buildMesh && cp refinement/output.', Nref, '* tetgenTOfemtic'
+  call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+  if (stat /= 0) error stop 'ERROR copying final refinement to tetgenTOfemtic folder'
+
+  call execute_command_line('cd buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
+
+  ! Ejecutar TetGen2Femtic con el último número
+  write(cmd,'(A,I0)') 'cd buildMesh/tetgenTOfemtic && TetGen2Femtic output.', Nref
+  call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+  if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
+
+  call execute_command_line('echo "done..." && sleep 1')
+
+  write(cmd,'(A,I0,A)') 'cp buildMesh/tetgenTOfemtic/{mesh.dat,resistivity_block_iter0.dat,output.', Nref,'.femtic.vtk} input_data/inv'
+  call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+
+  ! Verificación
+  inquire(file='input_data/inv/mesh.dat', exist=ex1)
+  inquire(file='input_data/inv/resistivity_block_iter0.dat', exist=ex2)
+  
+  write(fname,'(A,I0,A)') 'input_data/inv/output.', Nref, '.femtic.vtk'
+  inquire(file=fname, exist=ex3)
+  
+  if (ex1 .and. ex2 .and. ex3) then
+     write(*,*) 'Input files for running Femtic are successfully copied to input_data/inv'
+  else
+     write(*,*) 'ERROR: Missing files after copy.'
+     write(*,*) 'mesh.dat exists? ', ex1
+     write(*,*) 'resistivity_block_iter0.dat exists? ', ex2
+     write(*,*) 'vtk exists? ', ex3
+     error stop
+  endif
+  
+  call execute_command_line('echo " " ')
+  call execute_command_line('echo " 🏁 Finishing meshTran execution..." && sleep 3')
 
 
-end program setting_fetic
+
+end subroutine run_TetGen2Femtic
+
+
+
+end program femtic_mesh_driver
