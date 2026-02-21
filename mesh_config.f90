@@ -1,4 +1,5 @@
-module mesh_types
+module mesh_config
+
    implicit none
    integer, parameter :: dp = kind(1.0d0)
 
@@ -34,4 +35,6 @@ module mesh_types
 
    end type MeshSettings
 
-end module mesh_types
+   type(MeshSettings) :: config   ! nombre más claro que settings
+
+end module mesh_config
