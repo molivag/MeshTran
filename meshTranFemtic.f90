@@ -1,7 +1,16 @@
 program femtic_mesh_driver
 
+   use mesh_config
+   use mesh_entities
    implicit none
-   integer, parameter:: dp = kind(1.0d0)
+   ! integer, parameter:: dp = kind(1.0d0)
+
+   TYPE(MeshSettings)::settings
+   type(MeshIO) :: io
+   type(SiteSet) :: sites
+   type(GlobalRefinement) :: globRefi
+   type(ParamRefinement) :: paramRefi
+   type(RegionModel) :: regions
 
    ! Control parameters
    character(len=256):: dem_file, outdir, dem_units, topography_file, bathymetry_file, coast_line_file
@@ -20,15 +29,13 @@ program femtic_mesh_driver
    real(dp), allocatable:: coordinate_regions(:, :), rhoOFregions(:)
    integer, allocatable :: repeatPartition(:), isRHOfix(:), IDregions(:)
 
+
+   
+
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-   call read_set_femtic('set_control_mesh.cpp', dem_file, dem_units, outdir, has_sea, sea_level, &
-                        xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, pad_x, pad_y, topography_file, &
-                        bathymetry_file, coast_line_file, Nsph, radius, edges, n_elipses, rotation, &
-                        ellipsForSite, maxSiteEdge, lenEllipseSite, NparamEsfer, edgesForEsfer, radiusForEsfer, &
-                        Nregions, coordinate_regions, IDregions, rhoOFregions, repeatPartition, isRHOfix, refi_tetgen)
-
+   call read_set_femtic("set_meshtran.io", settings)
    !---------------------------------------------------
    !     Read Digital Elevation Model
    !---------------------------------------------------
@@ -76,14 +83,16 @@ program femtic_mesh_driver
    call check_domain(dem_x_km, dem_y_km, xminDOM, xmaxDOM, yminDOM, ymaxDOM, pad_x, pad_y)
 
    ! !Write files in mesh coordinates centered at anchor point
-   call define_analysis_domain(outdir, xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM)
-   call write_topography(topography_file, dem_x_km, dem_y_km, dem_z, n_dem, sea_level, outdir)
+   call define_analysis_domain(xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM)
+   call write_topography(topography_file, dem_x_km, dem_y_km, dem_z, n_dem, sea_level)
    call write_bathymetry(bathymetry_file, dem_x_km, dem_y_km, dem_z, n_dem, sea_level, outdir)
    call write_coast_line(coast_line_file, xminDOM, xmaxDOM, yminDOM, ymaxDOM, outdir)
    call write_observing_sites(site_x_km, site_y_km, n_edi_files, outdir, Nsph, edges, radius)
 
    call setGlobalMeshRefinement(outdir, 0.0d0, 0.0d0, n_elipses, rotation, site_x_km, site_y_km, &
                                 n_edi_files, ellipsForSite, maxSiteEdge, lenEllipseSite)
+   ! call setGlobalMeshRefinement(io, sites, globRefi)
+
    call resistivitty_attribute(outdir, n_sites, site_x_km, site_y_km, fix_elev_site, NparamEsfer, edgesForEsfer, &
                                radiusForEsfer, Nregions, IDregions, rhoOFregions, repeatPartition, isRHOfix)
 
@@ -95,160 +104,113 @@ contains
    !=========================================================
    !=======
    !=========================================================
-   subroutine read_set_femtic(fname, dem_file, dem_units, outdir, has_sea, lsea_level, &
-                              xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, pad_x, pad_y, &
-                              topography_file, bathymetry_file, coastLine_file, Nsph, radius, edges, &
-                              num_glob_elipses, rotation_glob_elipses, n_ellipses_site, maxSiteEdge, lenEllipseSite, &
-       NparEsfer, edge_esfer, rad_esfer, Nregions, coord_regions, regionsID, rho_regions, repeat_Partition, is_rho_fix, refi_tetgen)
+   subroutine read_set_femtic(fname, settings)
 
+      use mesh_config
       implicit none
-      character(len=*), intent(in):: fname
-      character(len=256), intent(out):: dem_file, outdir, dem_units, topography_file, bathymetry_file, coastLine_file
-      logical, intent(out):: has_sea
-      real(dp), intent(out):: lsea_level, xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM
-      real(dp), intent(out):: pad_x, pad_y, rotation_glob_elipses
-      integer, intent(out):: Nsph, num_glob_elipses, n_ellipses_site, NparEsfer, Nregions, refi_tetgen
-      integer, allocatable, intent(out):: repeat_Partition(:), is_rho_fix(:), regionsID(:)
-      real(8), allocatable, INTENT(out):: radius(:), edges(:), maxSiteEdge(:), lenEllipseSite(:), edge_esfer(:), rad_esfer(:)
-      real(8), allocatable, INTENT(out):: coord_regions(:, :), rho_regions(:)
 
-      real(8), allocatable  :: temp_vec(:)
-      character(len=256)  :: line, key, val
-      integer               :: iu
+      character(len=*), intent(in) :: fname
+      type(MeshSettings), intent(inout) :: settings
+
+      character(len=256) :: line, key, val
+      integer :: iu
+      real(dp), allocatable :: temp_vec(:)
 
       open (newunit=iu, file=fname, status='old')
 
       do
          read (iu, '(A)', end=100) line
          if (index(line, '=') == 0) cycle
+
          key = adjustl(trim(line(:index(line, '=') - 1)))
          val = adjustl(trim(line(index(line, '=') + 1:)))
 
          select case (trim(key))
-         case ('DEM_FILE'); dem_file = trim(val)
-         case ('DEM_UNITS'); dem_units = trim(val)
-         case ('TOPO_FILE'); topography_file = trim(val)
-         case ('BATHY_FILE'); bathymetry_file = trim(val)
-         case ('COSLI_FILE'); coastLine_file = trim(val)
-         case ('OUTDIR'); outdir = trim(val)
-         case ('HAS_SEA'); has_sea = (trim(val) == 'YES')
-         case ('SEA_LEVEL'); read (val, *) lsea_level
-         case ('XMIN_DOM'); read (val, *) xminDOM
-         case ('XMAX_DOM'); read (val, *) xmaxDOM
-         case ('YMIN_DOM'); read (val, *) yminDOM
-         case ('YMAX_DOM'); read (val, *) ymaxDOM
-         case ('ZMIN_DOM'); read (val, *) zminDOM
-         case ('ZMAX_DOM'); read (val, *) zmaxDOM
-         case ('PAD_X'); read (val, *) pad_x
-         case ('PAD_Y'); read (val, *) pad_y
-         case ('ROTATION'); read (val, *) rotation_glob_elipses
-         case ('NUM_ELIPSES'); read (val, *) num_glob_elipses
+
+         case ('DEM_FILE')
+            settings%dem_file = trim(val)
+
+         case ('DEM_UNITS')
+            settings%dem_units = trim(val)
+
+         case ('OUTDIR')
+            settings%outdir = trim(val)
+
+         case ('SEA_LEVEL')
+            read (val, *) settings%sea_level
+
+         case ('XMIN_DOM')
+            read (val, *) settings%xminDOM
+
+         case ('XMAX_DOM')
+            read (val, *) settings%xmaxDOM
+
+         case ('YMIN_DOM')
+            read (val, *) settings%yminDOM
+
+         case ('YMAX_DOM')
+            read (val, *) settings%ymaxDOM
+
+         case ('ZMIN_DOM')
+            read (val, *) settings%zminDOM
+
+         case ('ZMAX_DOM')
+            read (val, *) settings%zmaxDOM
+
+         case ('PAD_X')
+            read (val, *) settings%pad_x
+
+         case ('PAD_Y')
+            read (val, *) settings%pad_y
+
+         case ('ROTATION')
+            read (val, *) settings%rotation
+
          case ('ESFERAS')
-            read (val, *) Nsph
-            if (allocated(radius)) deallocate (radius)
-            if (allocated(edges)) deallocate (edges)
-            allocate (radius(Nsph), edges(Nsph))
+            read (val, *) settings%Nsph
+
+            if (allocated(settings%radius)) deallocate (settings%radius)
+            if (allocated(settings%edges)) deallocate (settings%edges)
+
+            allocate (settings%radius(settings%Nsph))
+            allocate (settings%edges(settings%Nsph))
+
          case ('RADIOS')
-            if (.not. allocated(radius)) then
-               write (*, *) 'ERROR: RADIOS defined before ESFERAS'
-               stop
-            end if
-            read (val, *) radius
+            read (val, *) settings%radius
+
          case ('EDGES')
-            if (.not. allocated(edges)) then
-               write (*, *) 'ERROR: EDGES defined before ESFERAS'
-               stop
-            end if
-            read (val, *) edges
-         case ('SITE_ELLIPSES')
-            read (val, *) n_ellipses_site
-            if (allocated(maxSiteEdge)) deallocate (maxSiteEdge)
-            if (allocated(lenEllipseSite)) deallocate (lenEllipseSite)
-            allocate (maxSiteEdge(n_ellipses_site), lenEllipseSite(n_ellipses_site))
-         case ('MAX_EDGE_LEN')
-            read (val, *) maxSiteEdge
-         case ('LEN_ELLIPSE')
-            read (val, *) lenEllipseSite
-
-         case ('PARAM_ESFER')
-            read (val, *) NparEsfer
-            if (allocated(rad_esfer)) deallocate (rad_esfer)
-            if (allocated(edge_esfer)) deallocate (edge_esfer)
-            allocate (rad_esfer(NparEsfer), edge_esfer(NparEsfer))
-
-         case ('PARAM_RADIOS')
-            if (.not. allocated(rad_esfer)) then
-               write (*, *) 'ERROR: EDGES defined before ESFERAS'
-               stop
-            end if
-            read (val, *) rad_esfer
-         case ('PARAM_EDGES')
-            if (.not. allocated(edge_esfer)) then
-               write (*, *) 'ERROR: EDGES defined before ESFERAS'
-               stop
-            end if
-            read (val, *) edge_esfer
+            read (val, *) settings%edges
 
          case ('REGIONS')
-            read (val, *) Nregions
-            if (allocated(coord_regions)) deallocate (coord_regions)
-            if (allocated(regionsID)) deallocate (regionsID)
-            if (allocated(rho_regions)) deallocate (rho_regions)
-            allocate (regionsID(Nregions), rho_regions(Nregions))
-            allocate (repeat_Partition(Nregions), is_rho_fix(Nregions))
-            allocate (coord_regions(3, Nregions))
-            allocate (temp_vec(3*Nregions))
+            read (val, *) settings%Nregions
+
+            if (allocated(settings%regionsID)) deallocate (settings%regionsID)
+            if (allocated(settings%rho_regions)) deallocate (settings%rho_regions)
+            if (allocated(settings%coord_regions)) deallocate (settings%coord_regions)
+
+            allocate (settings%regionsID(settings%Nregions))
+            allocate (settings%rho_regions(settings%Nregions))
+            allocate (settings%coord_regions(3, settings%Nregions))
+            allocate (temp_vec(3*settings%Nregions))
+
          case ('LOCATION')
-            if (.not. allocated(coord_regions)) then
-               write (*, *) 'ERROR: EDGES defined before ESFERAS'
-               stop
-            end if
             read (val, *) temp_vec
-            coord_regions = reshape(temp_vec, (/3, Nregions/))
+            settings%coord_regions = reshape(temp_vec, (/3, settings%Nregions/))
             deallocate (temp_vec)
+
          case ('ID_REGION')
-            if (.not. allocated(regionsID)) then
-               write (*, *) 'ERROR: EDGES defined before REGIONS'
-               stop
-            end if
-            read (val, *) regionsID
+            read (val, *) settings%regionsID
+
          case ('RHO_REGIONS')
-            if (.not. allocated(rho_regions)) then
-               write (*, *) 'ERROR: EDGES defined before REGIONS'
-               stop
-            end if
-            read (val, *) rho_regions
+            read (val, *) settings%rho_regions
 
-         case ('REP_PARTITION')
-            if (.not. allocated(repeat_Partition)) then
-               write (*, *) 'ERROR: EDGES defined before REGIONS'
-               stop
-            end if
-            read (val, *) repeat_Partition
-
-         case ('FIX_RESISTIVITY')
-            if (.not. allocated(is_rho_fix)) then
-               write (*, *) 'ERROR: FIX_RESISTIVITY defined before REGIONS'
-               stop
-            end if
-            read (val, *) is_rho_fix
-         case ('TET_REFINEMENT'); read (val, *) refi_tetgen
          end select
+
       end do
 
 100   close (iu)
 
-      if (Nsph <= 0) then
-         write (*, *) 'ERROR: ESFERAS not defined'
-         stop
-      end if
-
-      if (.not. allocated(radius) .or. .not. allocated(edges)) then
-         write (*, *) 'ERROR: RADIOS or EDGES not defined'
-         stop
-      end if
-
-   end subroutine
+   end subroutine read_set_femtic
 !=========================================================
 !=======
 !=========================================================
@@ -627,7 +589,12 @@ contains
       demYkm = demYmts
 
       dir = 'input_data/'
-
+      ! ojo aqui cuando meshtran se pase a la estructura de folders de mtif entonces la ruta
+      !debera ser:
+      !     dir = '../preprocessing'
+      !y esto es asi porque meshtran se ejecutara en bin/ y debe subir un nivel in entrar
+      !en preprocessing
+   
       ! ==========================
       ! Write SITE coordinates
       ! ==========================
@@ -764,19 +731,41 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_topography(topo_file, x, y, z, n, sea_level, outdir)
+   subroutine define_analysis_domain(xmin, xmax, ymin, ymax, zmin, zmax)
+      use mesh_config
+      implicit none
+      real(8), intent(in):: xmin, xmax, ymin, ymax, zmin, zmax
+      integer:: iu
+
+      ! xmin =  - pad_x
+      ! xmax = maxval(x) + pad_x
+      ! ymin = minval(y) - pad_y
+      ! ymax = maxval(y) + pad_y
+
+      open (newunit=iu, file="./"//trim(config%outdir)//"analysis_domain.dat", status='replace', action='write')
+      write (iu, '(2F10.2)') xmin, xmax
+      write (iu, '(2F10.2)') ymin, ymax
+      write (iu, '(2F10.2)') zmin, zmax
+      close (iu)
+
+   end subroutine
+!=========================================================
+!=======
+!=========================================================
+   subroutine write_topography(topo_file, x, y, z, n, sea_level)!, outdir)
+      use mesh_config
       implicit none
       character(len=*), intent(in):: topo_file
       real(dp), intent(in):: x(:), y(:)
       real(dp)   :: z(:)
       integer, intent(in):: n
       real(dp), intent(in):: sea_level
-      character(len=*), intent(in):: outdir
+      ! character(len=*), intent(in):: outdir
       integer:: i, iu
 
       z = z/1000.0d0
 
-      open (newunit=iu, file=trim(outdir)//topo_file, status='replace')
+      open (newunit=iu, file=trim(config%outdir)//topo_file, status='replace')
       do i = 1, n
          if (.not. has_sea) then
             ! Caso SIN mar: todo es tierra
@@ -844,27 +833,6 @@ contains
       else
          stop 'Sea case not implemented yet'
       end if
-   end subroutine
-!=========================================================
-!=======
-!=========================================================
-   subroutine define_analysis_domain(outdir, xmin, xmax, ymin, ymax, zmin, zmax)
-      implicit none
-      character(len=*), intent(in):: outdir
-      real(8), intent(in):: xmin, xmax, ymin, ymax, zmin, zmax
-      integer:: iu
-
-      ! xmin =  - pad_x
-      ! xmax = maxval(x) + pad_x
-      ! ymin = minval(y) - pad_y
-      ! ymax = maxval(y) + pad_y
-
-      open (newunit=iu, file="./"//trim(outdir)//"analysis_domain.dat", status='replace', action='write')
-      write (iu, '(2F10.2)') xmin, xmax
-      write (iu, '(2F10.2)') ymin, ymax
-      write (iu, '(2F10.2)') zmin, zmax
-      close (iu)
-
    end subroutine
 !=========================================================
 !=======
