@@ -1,11 +1,8 @@
 module mesh_entities
-   use mesh_config
+   use mesh_config, only: dp
+
    implicit none
    ! integer, parameter :: dp = kind(1.0d0)
-
-   type :: MeshIO
-      character(len=256) :: outdir
-   end type MeshIO
 
    type :: SiteSet
       character(len=256),  allocatable :: id(:)
@@ -17,24 +14,28 @@ module mesh_entities
    type :: GlobalRefinement
       real(dp), allocatable :: maxSiteEdge(:)
       real(dp), allocatable :: lenEllipseSite(:)
+      integer               :: n_ellipses_site = 0
       real(dp)              :: rotation = 0.0_dp
-      integer               :: n_ellipses = 0
       integer               :: ellipsForSite = 0
    end type GlobalRefinement
 
    type :: ParamRefinement
-      integer :: n = 0
+      integer :: Nsph = 0
       real(dp), allocatable :: edges(:)
       real(dp), allocatable :: radius(:)
    end type ParamRefinement
 
-   type :: RegionModel
-      integer :: n = 0
-      integer, allocatable :: id(:)
+   type :: ModelRegion
+      integer :: Nregions = 0
+      integer :: NparamEsfer = 0
+      integer, allocatable  :: ID(:)
       real(dp), allocatable :: rho(:)
-      integer, allocatable :: repeatPartition(:)
-      integer, allocatable :: isRHOfix(:)
+      integer, allocatable  :: repeatPartition(:)
+      integer, allocatable  :: isRHOfix(:)
       real(dp), allocatable :: coord(:, :)
-   end type RegionModel
+      
+      real(dp), allocatable :: radiusForEsfer(:)
+      real(dp), allocatable :: edgesForEsfer(:)
+   end type ModelRegion
 
 end module mesh_entities
