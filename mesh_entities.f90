@@ -12,11 +12,12 @@ module mesh_entities
    end type SiteSet
 
    type :: GlobalRefinement
+      integer               :: ellipsForSite = 0
+      integer               :: n_ellipses_site = 0
+      integer               :: n_iterative_refi = 0
+      real(dp)              :: rotation = 0.0_dp
       real(dp), allocatable :: maxSiteEdge(:)
       real(dp), allocatable :: lenEllipseSite(:)
-      integer               :: n_ellipses_site = 0
-      real(dp)              :: rotation = 0.0_dp
-      integer               :: ellipsForSite = 0
    end type GlobalRefinement
 
    type :: ParamRefinement
@@ -29,11 +30,10 @@ module mesh_entities
       integer :: Nregions = 0
       integer :: NparamEsfer = 0
       integer, allocatable  :: ID(:)
-      real(dp), allocatable :: rho(:)
       integer, allocatable  :: repeatPartition(:)
       integer, allocatable  :: isRHOfix(:)
+      real(dp), allocatable :: rho(:)
       real(dp), allocatable :: coord(:, :)
-      
       real(dp), allocatable :: radiusForEsfer(:)
       real(dp), allocatable :: edgesForEsfer(:)
    end type ModelRegion
