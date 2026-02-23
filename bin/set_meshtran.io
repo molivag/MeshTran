@@ -8,7 +8,6 @@
 DEM_FILE = TOTPO_KAL_BBMT_FLAT_475m.xyz
 DEM_UNITS = kilometers 
 
-OUTDIR = input_data/geometry/
 TOPO_FILE = topography_for.dat 
 BATHY_FILE = bathymetry_for.dat
 COSLI_FILE = coast_line.dat
@@ -26,16 +25,10 @@ PAD_Y = 10.0
 HAS_SEA = NO
 SEA_LEVEL = 0.0
 
-
 ## => Refinement for sites at the surface
 ESFERAS = 5
 RADIOS = 0.1 0.3 1.0 3.0 5.0
 EDGES = 0.02 0.05 0.10 0.30 0.50
-
-## => Refinement for sites at the volumetric mesh
-SITE_ELLIPSES = 6
-LEN_ELLIPSE =  0.5  1.0  1.5  2.0  3.0  5.0
-MAX_EDGE_LEN = 0.10 0.20 0.30 0.50 1.00 2.00
 
 ## => Regions Atributes in the model
 REGIONS = 2
@@ -51,6 +44,10 @@ PARAM_ESFER = 2
 PARAM_RADIOS = 3.0 5.0 
 PARAM_EDGES = 2.0 3.0 
 
+## => Refinement for sites at the volumetric mesh
+SITE_ELLIPSES = 6
+LEN_ELLIPSE =  0.5  1.0  1.5  2.0  3.0  5.0
+MAX_EDGE_LEN = 0.10 0.20 0.30 0.50 1.00 2.00
 
 ## => Global Mesh Refinement based 
 ##    on ellipses growing from the center of the model
