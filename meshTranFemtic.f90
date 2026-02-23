@@ -3,21 +3,18 @@ program femtic_mesh_driver
    use mesh_config
    use mesh_entities
    implicit none
-   ! integer, parameter:: dp = kind(1.0d0)
 
-   TYPE(MeshSettings)::settings
-   type(MeshIO) :: io
-   type(SiteSet) :: sites
    type(GlobalRefinement) :: globRefi
    type(ParamRefinement) :: paramRefi
-   type(RegionModel) :: regions
+   TYPE(MeshSettings)::settings
+   type(ModelRegion) :: regions
+   type(SiteSet) :: sites
 
    ! Control parameters
-   character(len=256):: dem_file, outdir, dem_units, topography_file, bathymetry_file, coast_line_file
+   character(len=256)::  topography_file, bathymetry_file, coast_line_file
    character(len=256), allocatable:: edi_files(:), edi_id(:)
    logical:: has_sea
-   real(dp):: sea_level
-   real(dp):: xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, x0, y0
+   real(dp):: xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, sea_level, x0, y0
    real(dp), allocatable:: edi_lat(:), edi_lon(:), edi_elev(:)
    real(dp):: pad_x, pad_y, rotation
 
@@ -30,16 +27,17 @@ program femtic_mesh_driver
    integer, allocatable :: repeatPartition(:), isRHOfix(:), IDregions(:)
 
 
-   
-
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-   call read_set_femtic("set_meshtran.io", settings)
+   call read_set_femtic("set_meshtran.io", settings, paramRefi, globRefi, regions)
    !---------------------------------------------------
    !     Read Digital Elevation Model
    !---------------------------------------------------
-   call read_dem(dem_file, dem_units, dem_x, dem_y, dem_z, n_dem)
+   print*, 'esto es topo'
+   print*, settings%topography_file
+
+   call read_dem( settings, dem_x, dem_y, dem_z, n_dem)
    allocate (dem_x_km(n_dem), dem_y_km(n_dem))
 
    !---------------------------------------------------
@@ -83,34 +81,35 @@ program femtic_mesh_driver
    call check_domain(dem_x_km, dem_y_km, xminDOM, xmaxDOM, yminDOM, ymaxDOM, pad_x, pad_y)
 
    ! !Write files in mesh coordinates centered at anchor point
-   call define_analysis_domain(xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM)
-   call write_topography(topography_file, dem_x_km, dem_y_km, dem_z, n_dem, sea_level)
-   call write_bathymetry(bathymetry_file, dem_x_km, dem_y_km, dem_z, n_dem, sea_level, outdir)
-   call write_coast_line(coast_line_file, xminDOM, xmaxDOM, yminDOM, ymaxDOM, outdir)
-   call write_observing_sites(site_x_km, site_y_km, n_edi_files, outdir, Nsph, edges, radius)
+   ! call define_analysis_domain(xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM)
+   call define_analysis_domain(settings)
+   call write_topography(settings, dem_x_km, dem_y_km, dem_z, n_dem)
+   call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z, n_dem)
+   call write_coast_line(settings )
+   call write_observing_sites(site_x_km, site_y_km, n_edi_files, paramRefi)
 
-   call setGlobalMeshRefinement(outdir, 0.0d0, 0.0d0, n_elipses, rotation, site_x_km, site_y_km, &
-                                n_edi_files, ellipsForSite, maxSiteEdge, lenEllipseSite)
-   ! call setGlobalMeshRefinement(io, sites, globRefi)
+   call setGlobalMeshRefinement( 0.0d0, 0.0d0, 10, site_x_km, site_y_km, n_edi_files, globRefi)
 
-   call resistivitty_attribute(outdir, n_sites, site_x_km, site_y_km, fix_elev_site, NparamEsfer, edgesForEsfer, &
-                               radiusForEsfer, Nregions, IDregions, rhoOFregions, repeatPartition, isRHOfix)
-
-   ! call run_makeTetraMesh_and_assign_regions(Nregions,coordinate_regions,IDregions)
-   ! call run_TETGEN_and_refine_mesh(refi_tetgen)
-   call run_TetGen2Femtic(refi_tetgen)
+   call resistivitty_attribute(n_sites, site_x_km, site_y_km, fix_elev_site, regions )
+   call run_makeTetraMesh_and_assign_regions(regions)
+   call run_TETGEN_and_refine_mesh(globRefi)
+   call run_TetGen2Femtic(globRefi)
 
 contains
    !=========================================================
    !=======
    !=========================================================
-   subroutine read_set_femtic(fname, settings)
+   subroutine read_set_femtic(fname, OBJsettings, OBJparamRefi, OBJglobRefi, OBJmodReg)
 
-      use mesh_config
+      use mesh_entities
       implicit none
 
       character(len=*), intent(in) :: fname
-      type(MeshSettings), intent(inout) :: settings
+      type(MeshSettings), intent(inout) :: OBJsettings
+      type(ParamRefinement), INTENT(INout) :: OBJparamRefi 
+      type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
+      type(ModelRegion), INTENT(INOUT) :: OBJmodReg
+
 
       character(len=256) :: line, key, val
       integer :: iu
@@ -128,81 +127,156 @@ contains
          select case (trim(key))
 
          case ('DEM_FILE')
-            settings%dem_file = trim(val)
+            OBJsettings%dem_file = trim(val)
+
+         case ('TOPO_FILE')
+            OBJsettings%topography_file = trim(val)
+
+         case ('BATHY_FILE')
+            OBJsettings%bathymetry_file = trim(val)
+
+         case ('COSLI_FILE')
+            OBJsettings%coastLine_file = trim(val)
 
          case ('DEM_UNITS')
-            settings%dem_units = trim(val)
-
-         case ('OUTDIR')
-            settings%outdir = trim(val)
+            OBJsettings%dem_units = trim(val)
 
          case ('SEA_LEVEL')
-            read (val, *) settings%sea_level
+            read (val, *) OBJsettings%sea_level
 
          case ('XMIN_DOM')
-            read (val, *) settings%xminDOM
+            read (val, *) OBJsettings%xminDOM
 
          case ('XMAX_DOM')
-            read (val, *) settings%xmaxDOM
+            read (val, *) OBJsettings%xmaxDOM
 
          case ('YMIN_DOM')
-            read (val, *) settings%yminDOM
+            read (val, *) OBJsettings%yminDOM
 
          case ('YMAX_DOM')
-            read (val, *) settings%ymaxDOM
+            read (val, *) OBJsettings%ymaxDOM
 
          case ('ZMIN_DOM')
-            read (val, *) settings%zminDOM
+            read (val, *) OBJsettings%zminDOM
 
          case ('ZMAX_DOM')
-            read (val, *) settings%zmaxDOM
+            read (val, *) OBJsettings%zmaxDOM
 
          case ('PAD_X')
-            read (val, *) settings%pad_x
+            read (val, *) OBJsettings%pad_x
 
          case ('PAD_Y')
-            read (val, *) settings%pad_y
+            read (val, *) OBJsettings%pad_y
 
          case ('ROTATION')
-            read (val, *) settings%rotation
+            read (val, *) OBJsettings%rotation
 
          case ('ESFERAS')
-            read (val, *) settings%Nsph
+            read (val, *) OBJparamRefi%Nsph
 
-            if (allocated(settings%radius)) deallocate (settings%radius)
-            if (allocated(settings%edges)) deallocate (settings%edges)
+            if (allocated(OBJparamRefi%radius)) deallocate (OBJparamRefi%radius)
+            if (allocated(OBJparamRefi%edges)) deallocate (OBJparamRefi%edges)
 
-            allocate (settings%radius(settings%Nsph))
-            allocate (settings%edges(settings%Nsph))
+            allocate (OBJparamRefi%radius(OBJparamRefi%Nsph))
+            allocate (OBJparamRefi%edges(OBJparamRefi%Nsph))
 
          case ('RADIOS')
-            read (val, *) settings%radius
+            read (val, *) OBJparamRefi%radius
 
          case ('EDGES')
-            read (val, *) settings%edges
+            read (val, *) OBJparamRefi%edges
 
+         !## => Refinement for mesh parameter based on spheres
+        case ('PARAM_ESFER')
+         read(val, *) OBJmodReg%NparamEsfer
+
+         if (allocated(OBJmodReg%radiusForEsfer)) deallocate(OBJmodReg%radiusForEsfer)
+         if (allocated(OBJmodReg%edgesForEsfer))   deallocate(OBJmodReg%edgesForEsfer)
+         allocate(OBJmodReg%radiusForEsfer(OBJmodReg%NparamEsfer))
+         allocate(OBJmodReg%edgesForEsfer(OBJmodReg%NparamEsfer))
+
+        case ('PARAM_RADIOS')
+          if (.not. allocated(OBJmodReg%radiusForEsfer)) then
+             write(*,*) 'ERROR: EDGES defined before paramESFERAS'
+             stop
+          end if
+          read(val, *) OBJmodReg%radiusForEsfer
+        case ('PARAM_EDGES')
+          if (.not. allocated(OBJmodReg%edgesForEsfer)) then
+             write(*,*) 'ERROR: EDGES defined before paramESFERAS'
+             stop
+          end if
+          read(val, *) OBJmodReg%edgesForEsfer
+
+
+         !## => Regions Atributes in the model
          case ('REGIONS')
-            read (val, *) settings%Nregions
+            read (val, *) OBJmodReg%Nregions
 
-            if (allocated(settings%regionsID)) deallocate (settings%regionsID)
-            if (allocated(settings%rho_regions)) deallocate (settings%rho_regions)
-            if (allocated(settings%coord_regions)) deallocate (settings%coord_regions)
+            if (allocated(OBJmodReg%ID)) deallocate (OBJmodReg%ID)
+            if (allocated(OBJmodReg%rho)) deallocate (OBJmodReg%rho)
+            if (allocated(OBJmodReg%coord)) deallocate (OBJmodReg%coord)
 
-            allocate (settings%regionsID(settings%Nregions))
-            allocate (settings%rho_regions(settings%Nregions))
-            allocate (settings%coord_regions(3, settings%Nregions))
-            allocate (temp_vec(3*settings%Nregions))
+            allocate (OBJmodReg%ID(OBJmodReg%Nregions))
+            allocate (OBJmodReg%rho(OBJmodReg%Nregions))
+            allocate (OBJmodReg%coord(3, OBJmodReg%Nregions))
+            allocate(OBJmodReg%repeatPartition(OBJmodReg%Nregions))
+            allocate(OBJmodReg%isRHOfix(OBJmodReg%Nregions))
+            allocate (temp_vec(3*OBJmodReg%Nregions))
 
          case ('LOCATION')
             read (val, *) temp_vec
-            settings%coord_regions = reshape(temp_vec, (/3, settings%Nregions/))
+            OBJmodReg%coord = reshape(temp_vec, (/3, OBJmodReg%Nregions/))
             deallocate (temp_vec)
 
          case ('ID_REGION')
-            read (val, *) settings%regionsID
+            read (val, *) OBJmodReg%ID
+            print*, 'ID regions', OBJmodReg%id
 
          case ('RHO_REGIONS')
-            read (val, *) settings%rho_regions
+         if (.not. allocated(OBJmodReg%rho)) then
+            write(*,*) 'ERROR: RHO_REGIONS defined before REGIONS'
+            stop
+         end if
+
+            read (val, *) OBJmodReg%rho
+
+         print*,'rho region',OBJmodReg%rho
+        case ('REP_PARTITION')
+          if (.not. allocated(OBJmodReg%repeatPartition)) then
+            write(*,*) 'ERROR: REP_PARTITION defined before REGIONS'
+            stop
+          end if
+          read(val, *) OBJmodReg%repeatPartition
+         print*, 'size repeatPartition=', size(OBJmodReg%repeatPartition)
+         print*,'rep partiton',OBJmodReg%repeatPartition
+
+        case ('FIX_RESISTIVITY')
+          if (.not. allocated(OBJmodReg%isRHOfix )) then
+            write(*,*) 'ERROR: FIX_RESISTIVITY defined before REGIONS'
+            stop
+          end if
+          read(val, *) OBJmodReg%isRHOfix
+         print*,'FIX_RESISTIVITY',OBJmodReg%isRHOfix
+
+         !## => Refinement for sites at the volumetric mesh
+         case ('SITE_ELLIPSES')
+           read(val, *) OBJglobRefi%n_ellipses_site
+
+           if (allocated(OBJglobRefi%maxSiteEdge)) deallocate(OBJglobRefi%maxSiteEdge)
+           if (allocated(OBJglobRefi%lenEllipseSite))   deallocate(OBJglobRefi%lenEllipseSite)
+           allocate(OBJglobRefi%maxSiteEdge(OBJglobRefi%n_ellipses_site))
+           ALLOCATE(OBJglobRefi%lenEllipseSite(OBJglobRefi%n_ellipses_site))
+         
+         case ('MAX_EDGE_LEN')
+           read(val,*) OBJglobRefi%maxSiteEdge
+
+         case ('LEN_ELLIPSE' )
+           read(val,*) OBJglobRefi%lenEllipseSite
+
+         !## => Iterative tetgen refinement
+         case ('TET_REFINEMENT'); read(val, *) OBJglobRefi%n_iterative_refi
+
 
          end select
 
@@ -214,9 +288,12 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_dem(fname, units, x, y, z, n)
+   subroutine read_dem(OBJsettings, x, y, z, n)
+
+      use mesh_config
       implicit none
-      character(len=*), intent(in):: fname, units
+      
+      type(MeshSettings), intent(in) :: OBJsettings
       real(dp), allocatable, intent(out):: x(:), y(:), z(:)
       integer, intent(out):: n
 
@@ -225,9 +302,9 @@ contains
       real(dp):: scale
 
       scale = 1.0_dp
-      if (units == 'meters') scale = 1.0d-3
+      if (settings%dem_units == 'meters') scale = 1.0d-3
 
-      open (newunit=iu, file=fname, status='old')
+      open (newunit=iu, file='../preprocessing/DEM/'//OBJsettings%dem_file , status='old')
       n = 0
       do
          read (iu, *, end=10)
@@ -368,11 +445,11 @@ contains
       ! 1) Listar archivos EDI usando el sistema
       !------------------------------------------------------------
       call execute_command_line( &
-         "ls ./input_data/edi_files/*.edi > "//tmpfile, &
+         "ls ../preprocessing/edi_files/*.edi > "//tmpfile, &
          exitstat=ios)
 
       if (ios /= 0) then
-         write (error_unit, *) "ERROR: failed to list ./input_data/edi_files/*.edi"
+         write (error_unit, *) "ERROR: failed to list ../preprocessing/edi_files/*.edi"
          stop
       end if
 
@@ -483,8 +560,8 @@ contains
       implicit none
       integer, intent(in)  :: n_files
       real(8), intent(in)  :: lat(n_files), lon(n_files)      ! grados decimales
-      real(8), intent(out):: x(n_files), y(n_files)           ! metros
-      integer, intent(out):: zone
+      real(8), intent(out) :: x(n_files), y(n_files)           ! metros
+      integer, intent(out) :: zone
 
       integer:: i
       real(8):: lon_mean
@@ -579,7 +656,7 @@ contains
       character(len=*), intent(in)  :: ediID(nn_sites)
       integer, intent(in)  :: nn_sites, nn_dem
       real(8), intent(out):: siteXkm(nn_sites), siteYkm(nn_sites), demXkm(nn_dem), demYkm(nn_dem)
-      character(len=11) :: dir
+      character(len=20) :: dir
       integer:: i, iu
 
       siteXkm = siteXm
@@ -588,7 +665,7 @@ contains
       demXkm = demXmts
       demYkm = demYmts
 
-      dir = 'input_data/'
+      dir = '../preprocessing/'
       ! ojo aqui cuando meshtran se pase a la estructura de folders de mtif entonces la ruta
       !debera ser:
       !     dir = '../preprocessing'
@@ -623,6 +700,7 @@ contains
 !=========================================================
    subroutine snap_sites_to_dem(ediID, site_x, site_y, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
 
+      use mesh_config
       implicit none
       integer, intent(in):: n_sites, n_dem
       real(8), intent(in):: site_x(n_sites), site_y(n_sites)
@@ -661,7 +739,7 @@ contains
       end do
 
       ! Writing final coordinate site files
-      fname = trim(outdir)//'/sites_coord_elev.dat'
+      fname = trim(outdir)//'sites_coord_elev.dat'
       open (newunit=iu, file=fname, status='replace', action='write')
       do i = 1, n_sites
          write (iu, '(A12, 3f15.5)') ediID(i), site_x(i), site_y(i), fix_elev_site(i)/1000.0d0
@@ -673,15 +751,16 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_observing_sites(site_x, site_y, n_sites, outdir, Nsph, edges, radius)
+   subroutine write_observing_sites(site_x, site_y, n_sites, OBJparamRefi)
+
       implicit none
 
       ! ======================
       ! Inputs
       ! ======================
-      integer, intent(in):: n_sites, Nsph
-      real(8), intent(in):: site_x(n_sites), site_y(n_sites), edges(Nsph), radius(Nsph)
-      character(len=*), intent(in):: outdir
+      integer, intent(in):: n_sites
+      type(ParamRefinement), INTENT(IN) :: OBJparamRefi
+      real(8), intent(in):: site_x(n_sites), site_y(n_sites)
 
       ! ======================
       ! Local variables
@@ -712,11 +791,11 @@ contains
       do i = 1, n_sites
 
          ! X  Y  Nsph
-         write (iu, '(2F15.6, 1X, I3, 2x)', advance='no') site_x(i), site_y(i), Nsph
+         write (iu, '(2F15.6, 1X, I3, 2x)', advance='no') site_x(i), site_y(i), OBJparamRefi%Nsph
 
          ! (Ri, Li) pairs
-         do k = 1, Nsph
-            write (iu, '(F5.2, F5.2, 1x)', advance='no') radius(k), edges(k)
+         do k = 1, OBJparamRefi%Nsph
+            write (iu, '(F5.2, F6.2, 3x)', advance='no') OBJparamRefi%radius(k), OBJparamRefi%edges(k)
          end do
 
          ! New line
@@ -731,10 +810,10 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine define_analysis_domain(xmin, xmax, ymin, ymax, zmin, zmax)
-      use mesh_config
+   subroutine define_analysis_domain(settings)
       implicit none
-      real(8), intent(in):: xmin, xmax, ymin, ymax, zmin, zmax
+      type(MeshSettings), INTENT(IN) :: settings
+         
       integer:: iu
 
       ! xmin =  - pad_x
@@ -742,30 +821,27 @@ contains
       ! ymin = minval(y) - pad_y
       ! ymax = maxval(y) + pad_y
 
-      open (newunit=iu, file="./"//trim(config%outdir)//"analysis_domain.dat", status='replace', action='write')
-      write (iu, '(2F10.2)') xmin, xmax
-      write (iu, '(2F10.2)') ymin, ymax
-      write (iu, '(2F10.2)') zmin, zmax
+      open (newunit=iu, file=trim(outdir)//"analysis_domain.dat", status='replace', action='write')
+      write (iu, '(2F10.2)') settings%xminDOM, settings%xmaxDOM
+      write (iu, '(2F10.2)') settings%yminDOM, settings%ymaxDOM
+      write (iu, '(2F10.2)') settings%zminDOM, settings%zmaxDOM
       close (iu)
 
    end subroutine
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_topography(topo_file, x, y, z, n, sea_level)!, outdir)
-      use mesh_config
+   subroutine write_topography(OBJsettings, x, y, z, n )
       implicit none
-      character(len=*), intent(in):: topo_file
-      real(dp), intent(in):: x(:), y(:)
-      real(dp)   :: z(:)
-      integer, intent(in):: n
-      real(dp), intent(in):: sea_level
-      ! character(len=*), intent(in):: outdir
-      integer:: i, iu
-
+      type(MeshSettings), INTENT(IN) :: OBJsettings
+      real(dp), intent(in)    :: x(:), y(:)
+      integer, intent(in)     :: n
+      real(dp), INTENT(INOUT) :: z(:)
+      integer                 :: i, iu
+         
       z = z/1000.0d0
 
-      open (newunit=iu, file=trim(config%outdir)//topo_file, status='replace')
+      open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
       do i = 1, n
          if (.not. has_sea) then
             ! Caso SIN mar: todo es tierra
@@ -784,19 +860,18 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_bathymetry(bathy_file, x, y, z, n, sea_level, outdir)
+   subroutine write_bathymetry(OBJsettings, x, y, z, n)
+
       implicit none
-      character(len=*), intent(in):: bathy_file
+      TYPE(MeshSettings), INTENT(IN) :: OBJsettings
       real(dp), intent(in):: x(:), y(:)
-      real(dp)    :: z(:)
+      real(dp), INTENT(INOUT) :: z(:)
       integer, intent(in):: n
-      real(dp), intent(in):: sea_level
-      character(len=*), intent(in):: outdir
       integer:: i, iu
 
       z = z/1000.0d0
 
-      open (newunit=iu, file=trim(outdir)//bathy_file, status='replace')
+      open (newunit=iu, file=trim(outdir)//OBJsettings%bathymetry_file, status='replace')
       do i = 1, n
          if (.not. has_sea) then
             ! Caso SIN mar: no hay batimetría
@@ -815,20 +890,19 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_coast_line(coast_line_file, xmin, xmax, ymin, ymax, outdir)
+   subroutine write_coast_line(settings) 
+
       implicit none
-      character(len=*), intent(in):: coast_line_file
-      real(dp), intent(in):: xmin, xmax, ymin, ymax
-      character(len=*), intent(in):: outdir
+      type(MeshSettings), INTENT(IN) :: settings
       integer:: iu
 
       if (.not. has_sea) then
-         open (newunit=iu, file=trim(outdir)//coast_line_file, status='replace')
+         open (newunit=iu, file=trim(outdir)//settings%coastLine_file, status='replace')
          write (iu, *) 1
-         write (iu, '(2(F21.15, 1X), 2I2)') xmin - 5.0d0, ymin - 5.0d0, 0, 0
-         write (iu, '(2(F21.15, 1X), 2I2)') xmax + 5.0d0, ymin - 5.0d0, 0, 0
-         write (iu, '(2(F21.15, 1X), 2I2)') xmax + 5.0d0, ymax + 5.0d0, 0, 0
-         write (iu, '(2(F21.15, 1X), 2I2)') xmin - 5.0d0, ymax + 5.0d0, 1, 0
+         write (iu, '(2(F21.15, 1X), 2I2)') settings%xminDOM - 5.0d0, settings%yminDOM - 5.0d0, 0, 0
+         write (iu, '(2(F21.15, 1X), 2I2)') settings%xmaxDOM + 5.0d0, settings%yminDOM - 5.0d0, 0, 0
+         write (iu, '(2(F21.15, 1X), 2I2)') settings%xmaxDOM + 5.0d0, settings%ymaxDOM + 5.0d0, 0, 0
+         write (iu, '(2(F21.15, 1X), 2I2)') settings%xminDOM - 5.0d0, settings%ymaxDOM + 5.0d0, 1, 0
          close (iu)
       else
          stop 'Sea case not implemented yet'
@@ -837,11 +911,12 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine run_makeTetraMesh_and_assign_regions(N_regions, coord_regions, ID_regions)
+   subroutine run_makeTetraMesh_and_assign_regions(OBJmodRegions)
       implicit none
 
-      integer, intent(in) :: N_regions, ID_regions(N_regions)
-      real(8), intent(in) :: coord_regions(3, N_regions)
+      type(ModelRegion), INTENT(IN) :: OBJmodRegions
+      ! integer, intent(in) :: N_regions, ID_regions(N_regions)
+      ! real(8), intent(in) :: coord_regions(3, N_regions)
 
       integer :: stat, iu_in, iu_out, k
       logical :: ex, found_part4
@@ -912,7 +987,7 @@ contains
       open (newunit=iu_in, file='buildMesh/output.poly', status='old')
       open (newunit=iu_out, file='buildMesh/output.poly.tmp', status='replace')
 
-      ! do
+      !
       !   read(iu_in, '(A)', end=100) line
 
       !   write(iu_out, '(A)') trim(line)
@@ -941,10 +1016,10 @@ contains
             found_part4 = .true.
 
             read (iu_in, '(A)') line   ! leer el "0"
-            write (iu_out, '(I0)') Nregions
+            write (iu_out, '(I0)') OBJmodRegions%Nregions
 
-            do k = 1, Nregions
-               write (iu_out, '(I3,3F10.3,I4,1PE12.4)') k, coord_regions(:, k), ID_regions(k), 1.0e9
+            do k = 1, OBJmodRegions%Nregions
+               write (iu_out, '(I3,3F10.3,I4,1PE12.4)') k, OBJmodRegions%coord(:, k), OBJmodRegions%ID(k), 1.0e9
             end do
          end if
 
@@ -968,19 +1043,18 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine setGlobalMeshRefinement(outdir_refi, xcenter, ycenter, Nglob_ellipses, rot_glob, corXsite, corYsite, &
-                                      nSites, n_site_ellipses, max_edge_len_within_ellipse, len_alon_x_axis)
+   subroutine setGlobalMeshRefinement(xcenter, ycenter, Nglob_ellipses, corXsite, corYsite, nSites, OBJglobRefi )
 
       implicit none
-      character(len=*), intent(in):: outdir_refi
+      type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
       integer, intent(in)   :: Nglob_ellipses
-      real(dp), intent(in)  :: ycenter, xcenter, rot_glob
+      real(dp), intent(in)  :: ycenter, xcenter!, rot_glob
       character(len=512)    :: fname
       real(dp)              :: z0, oblatness_on_ZXplane
-      integer               :: iu, i, nSites, n_site_ellipses, k
+      integer               :: iu, i, nSites, k
       ! Parámetros hardcodeados (pueden ser arreglos en el futuro)
       real(dp) :: a(Nglob_ellipses), lengths(Nglob_ellipses), fh(Nglob_ellipses), fvp(Nglob_ellipses), fvm(Nglob_ellipses)
-      real(dp), intent(in) :: len_alon_x_axis(n_site_ellipses), max_edge_len_within_ellipse(n_site_ellipses)
+      ! real(dp), intent(in) :: len_alon_x_axis(n_site_ellipses), max_edge_len_within_ellipse(n_site_ellipses)
       real(dp), intent(in) :: corXsite(nSites), corYsite(nSites)
 
       z0 = 0.0d0
@@ -994,29 +1068,30 @@ contains
 
       a = a*1.0d0
 
-      fname = trim(outdir_refi)//'makeMtr.param'
+      fname = trim(outdir)//'makeMtr.param'
       open (newunit=iu, file=fname, status='replace', action='write')
 
       ! 1. Coordenadas del centro (Y, X, Z)
       write (iu, '(3F12.5)') xcenter, ycenter, z0
 
       ! 2. Ángulo de rotación
-      write (iu, '(F12.2)') rot_glob
+      write (iu, '(F12.2)') OBJglobRefi%rotation
 
       ! 3. Número de elipsoides
-      write (iu, '(I5)') Nglob_ellipses
+      ! write (iu, '(I5)') Nglob_ellipses
+      write (iu, '(I5)') OBJglobRefi%n_ellipses_site
 
       ! 4. Bloque de elipsoides
-      do i = 1, min(Nglob_ellipses, 10)
+      do i = 1, min(10, 10)
          write (iu, '(F6.1, F6.1, 1x, 3F6.2)') a(i), lengths(i), fh(i), fvp(i), fvm(i)
       end do
 
       close (iu)
-      print *, 'Archivo makeMtr.param creado exitosamente en buildMesh/'
+      print *, 'Archivo makeMtr.param creado exitosamente en ',trim(outdir)
 
       oblatness_on_ZXplane = 0.3
 
-      fname = trim(outdir_refi)//'/obs_site.dat'
+      fname = trim(outdir)//'/obs_site.dat'
       open (newunit=iu, file=fname, status='replace', action='write', form='formatted')
 
       ! ======================
@@ -1030,35 +1105,35 @@ contains
       do i = 1, nSites
          ! X  Y  z0
          write (iu, '(3F15.6 )') corXsite(i), corYsite(i), z0
-         write (iu, '(I1)') n_site_ellipses
+         write (iu, '(I1)') OBJglobRefi%n_ellipses_site 
 
          ! (Ri, Li) pairs
-         do k = 1, n_site_ellipses
-            write (iu, '(3F5.2 )') len_alon_x_axis(k), max_edge_len_within_ellipse(k), oblatness_on_zxplane
+         do k = 1, OBJglobRefi%n_ellipses_site 
+            write (iu, '(3F5.2 )')&
+            OBJglobRefi%lenEllipseSite(k), OBJglobRefi%maxSiteEdge(k), oblatness_on_zxplane
          end do
       end do
 
       close (iu)
-      print *, 'Archivo obs_site.dat creado exitosamente en buildMesh/'
+      print *, 'Archivo obs_site.dat creado exitosamente en ',trim(outdir)
 
    end subroutine setGlobalMeshRefinement
 !=========================================================
 !=======
 !=========================================================
-   subroutine resistivitty_attribute(out_dir, Nsites, coorXsite, coorYsite, coorZsite, &
-                                     N_paramEsfer, esferEdges, radiusEsfer, N_regions, ID_regions, rhoRegions, repRegion, fixed)
+   subroutine resistivitty_attribute( Nsites, coorXsite, coorYsite, coorZsite, OBJmodReg)
 
       implicit none
 
+      type(ModelRegion), INTENT(IN) :: OBJmodReg
       ! ======================
       ! Inputs
       ! ======================
-      character(len=*), intent(in):: out_dir
-      integer, intent(in) :: Nsites, N_regions, N_paramEsfer
+      integer, intent(in) :: Nsites!, N_regions, N_paramEsfer
       real(8), intent(in) :: coorXsite(Nsites), coorYsite(Nsites), coorZsite(Nsites)
-      real(8), intent(in) :: esferEdges(N_paramEsfer), radiusEsfer(N_paramEsfer)
-      real(8), intent(in) :: rhoRegions(N_regions)
-      integer, intent(in) :: repRegion(N_regions), fixed(N_regions), ID_regions(N_regions)
+      ! real(8), intent(in) :: esferEdges(N_paramEsfer), radiusEsfer(N_paramEsfer)
+      ! real(8), intent(in) :: rhoRegions(N_regions)
+      ! integer, intent(in) :: repRegion(N_regions), fixed(N_regions), ID_regions(N_regions)
 
       ! ======================
       ! Local variables
@@ -1076,16 +1151,17 @@ contains
       fh_reg = (/0.5, 0.5, 0.4, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0/)
       fv_reg = (/0.7, 0.7, 0.7, 0.6, 0.5, 0.3, 0.2, 0.1, 0.0/)
 
-      fname = trim(out_dir)//'resistivity_attr.dat'
+      fname = trim(outdir)//'resistivity_attr.dat'
       open (newunit=iu, file=fname, status='replace', action='write')
 
       ! -----------------------------------------------------------
       ! PARTE 1: Atributos de Región (Nreg = 3: Aire, Mar, Subsuelo)
       ! Formato: ID  Resistividad  RepeatNumber  FixFlag
       ! -----------------------------------------------------------
-      write (iu, '(I2)') N_regions
-      do j = 1, N_regions
-         write (iu, '(I0, 2X, ES10.3, 1X, I3, 1X, I3)') ID_regions(j), rhoRegions(j), repRegion(j), fixed(j)
+      write (iu, '(I2)') OBJmodReg%Nregions
+      do j = 1, OBJmodReg%Nregions
+         !write (iu, '(I0, 2X, ES10.3, 1X, I3, 1X, I3)') ID_regions(j), rhoRegions(j), repRegion(j), fixed(j)
+         write (iu, '(I0,2X,ES10.3,2(1X,I3))') OBJmodReg%ID(j), OBJmodReg%rho(j), OBJmodReg%repeatPartition(j), OBJmodReg%isRHOfix(j)
       end do
 
       ! -----------------------------------------------------------
@@ -1107,25 +1183,25 @@ contains
          write (iu, '(3(F0.6,2x))') coorXsite(i), coorYsite(i), coorZsite(i)
 
          ! Número de esferas por sitio (Ejemplo: 2 esferas)
-         write (iu, '(I0)') N_paramEsfer
+         write (iu, '(I0)') OBJmodReg%NparamEsfer
          ! Formato: Radio_km  len_km
-         do j = 1, N_paramEsfer
-            write (iu, '(F5.1, 1X, F5.1)') radiusEsfer(j), esferEdges(j)
+         do j = 1, OBJmodReg%NparamEsfer
+            write (iu, '(F5.1, 1X, F5.1)') OBJmodReg%radiusForEsfer(j), OBJmodReg%edgesForEsfer(j)
          end do
 
       end do
 
       close (iu)
-      print *, 'OK: resistivity_attr.dat escrito exitosamente'
+      print *, 'file resistivity_attr.dat escrito exitosamente en ',trim(outdir)
 
-   end subroutine
+   end subroutine resistivitty_attribute
 !=========================================================
 !=======
 !=========================================================
-   subroutine run_TETGEN_and_refine_mesh(Nref)
+   subroutine run_TETGEN_and_refine_mesh(OBJmodReg)
       implicit none
 
-      integer, intent(in) :: Nref
+      type(GlobalRefinement), intent(in) :: OBJmodReg
       integer :: r, stat
       character(len=512) :: cmd
 
@@ -1159,9 +1235,9 @@ contains
 
       ! --------------------------------------------------
       ! Iterative refinement
-      ! for i in 1 2 ... Nref
+      ! for i in 1 2 ... OBJmodReg%n_iterative_refi
       ! --------------------------------------------------
-      do r = 1, Nref - 1
+      do r = 1, OBJmodReg%n_iterative_refi - 1
 
          write (cmd, '(A,I0,A)') 'cd buildMesh/refinement && head output.', r, '.ele'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
@@ -1184,10 +1260,10 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine run_TetGen2Femtic(Nref)
+   subroutine run_TetGen2Femtic(OBJglobRefi)
       implicit none
 
-      integer, intent(in) :: Nref
+      type(GlobalRefinement), intent(in) :: OBJglobRefi
       character(len=256) :: cmd, fname
       integer :: stat
       logical :: ex1, ex2, ex3
@@ -1199,28 +1275,28 @@ contains
          error stop 'ERROR: could not be created tetgenTOfemtic directory'
       end if
       ! Copiar el último refinement
-      write (cmd, '(A,I0,A)') 'cd buildMesh && cp refinement/output.', Nref, '* tetgenTOfemtic'
+      write (cmd, '(A,I0,A)') 'cd buildMesh && cp refinement/output.', OBJglobRefi%n_iterative_refi, '* tetgenTOfemtic'
       call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
       if (stat /= 0) error stop 'ERROR copying final refinement to tetgenTOfemtic folder'
 
       call execute_command_line('cd buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
 
       ! Ejecutar TetGen2Femtic con el último número
-      write (cmd, '(A,I0)') 'cd buildMesh/tetgenTOfemtic && TetGen2Femtic output.', Nref
+      write (cmd, '(A,I0)') 'cd buildMesh/tetgenTOfemtic && TetGen2Femtic output.', OBJglobRefi%n_iterative_refi
       call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
       if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
 
       call execute_command_line('echo "done..." && sleep 1')
 
       write (cmd, '(A,I0,A)') 'cp buildMesh/tetgenTOfemtic/&
-    &      {mesh.dat,resistivity_block_iter0.dat,output.', Nref, '.femtic.vtk} input_data/inv'
+    &      {mesh.dat,resistivity_block_iter0.dat,output.', OBJglobRefi%n_iterative_refi, '.femtic.vtk} input_data/inv'
       call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
 
       ! Verificación
       inquire (file='input_data/inv/mesh.dat', exist=ex1)
       inquire (file='input_data/inv/resistivity_block_iter0.dat', exist=ex2)
 
-      write (fname, '(A,I0,A)') 'input_data/inv/output.', Nref, '.femtic.vtk'
+      write (fname, '(A,I0,A)') 'input_data/inv/output.', OBJglobRefi%n_iterative_refi, '.femtic.vtk'
       inquire (file=fname, exist=ex3)
 
       if (ex1 .and. ex2 .and. ex3) then
