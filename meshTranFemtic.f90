@@ -11,33 +11,28 @@ program femtic_mesh_driver
    type(SiteSet) :: sites
 
    ! Control parameters
-   character(len=256)::  topography_file, bathymetry_file, coast_line_file
    character(len=256), allocatable:: edi_files(:), edi_id(:)
    logical:: has_sea
-   real(dp):: xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM, sea_level, x0, y0
-   real(dp), allocatable:: edi_lat(:), edi_lon(:), edi_elev(:)
-   real(dp):: pad_x, pad_y, rotation
+   real(dp):: xminDOM, xmaxDOM, yminDOM, ymaxDOM!, zminDOM, zmaxDOM
+   real(dp), allocatable:: edi_lat(:), edi_lon(:), edi_elev(:),  site_x_km(:), site_y_km(:), dem_x_km(:), dem_y_km(:)
+   real(dp):: pad_x, pad_y, sea_level, x0, y0
 
    ! DEM data
-   integer:: n_dem, zone, n_edi_files, Nsph, n_sites, n_elipses, ellipsForSite, NparamEsfer, Nregions, refi_tetgen
+   integer:: n_dem, zone, n_edi_files, n_sites!, Nsph, n_elipses, ellipsForSite, NparamEsfer, Nregions, refi_tetgen
    real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
-   real(dp), allocatable:: site_x_km(:), site_y_km(:), dem_x_km(:), dem_y_km(:), radius(:), edges(:)
-   real(dp), allocatable:: maxSiteEdge(:), lenEllipseSite(:), edgesForEsfer(:), radiusForEsfer(:)
-   real(dp), allocatable:: coordinate_regions(:, :), rhoOFregions(:)
-   integer, allocatable :: repeatPartition(:), isRHOfix(:), IDregions(:)
-
 
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
    call read_set_femtic("set_meshtran.io", settings, paramRefi, globRefi, regions)
    !---------------------------------------------------
+   !     Check if Read input configutation file
+   !---------------------------------------------------
+   call mesh_convertion(settings)
+   !---------------------------------------------------
    !     Read Digital Elevation Model
    !---------------------------------------------------
-   print*, 'esto es topo'
-   print*, settings%topography_file
-
-   call read_dem( settings, dem_x, dem_y, dem_z, n_dem)
+   call read_dem(settings, dem_x, dem_y, dem_z, n_dem)
    allocate (dem_x_km(n_dem), dem_y_km(n_dem))
 
    !---------------------------------------------------
@@ -74,26 +69,21 @@ program femtic_mesh_driver
    !---------------------------------------------------
    call recenter_all(n_edi_files, n_dem, x0, y0, site_x_km, site_y_km, dem_x_km, dem_y_km)
    !a parti de aqui coordenadas de malla
-
    call snap_sites_to_dem(edi_id, site_x_km, site_y_km, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
-
    ! !Check if DEM cover whole analysis domain+padding area
    call check_domain(dem_x_km, dem_y_km, xminDOM, xmaxDOM, yminDOM, ymaxDOM, pad_x, pad_y)
 
    ! !Write files in mesh coordinates centered at anchor point
-   ! call define_analysis_domain(xminDOM, xmaxDOM, yminDOM, ymaxDOM, zminDOM, zmaxDOM)
    call define_analysis_domain(settings)
    call write_topography(settings, dem_x_km, dem_y_km, dem_z, n_dem)
    call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z, n_dem)
-   call write_coast_line(settings )
+   call write_coast_line(settings)
    call write_observing_sites(site_x_km, site_y_km, n_edi_files, paramRefi)
-
    call setGlobalMeshRefinement( 0.0d0, 0.0d0, 10, site_x_km, site_y_km, n_edi_files, globRefi)
-
    call resistivitty_attribute(n_sites, site_x_km, site_y_km, fix_elev_site, regions )
    call run_makeTetraMesh_and_assign_regions(regions)
    call run_TETGEN_and_refine_mesh(globRefi)
-   call run_TetGen2Femtic(globRefi)
+   call run_TetGen2Femtic(settings, globRefi)
 
 contains
    !=========================================================
@@ -106,10 +96,9 @@ contains
 
       character(len=*), intent(in) :: fname
       type(MeshSettings), intent(inout) :: OBJsettings
-      type(ParamRefinement), INTENT(INout) :: OBJparamRefi 
+      type(ParamRefinement), INTENT(INout) :: OBJparamRefi
       type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
       type(ModelRegion), INTENT(INOUT) :: OBJmodReg
-
 
       character(len=256) :: line, key, val
       integer :: iu
@@ -125,6 +114,9 @@ contains
          val = adjustl(trim(line(index(line, '=') + 1:)))
 
          select case (trim(key))
+
+         case ('MESH_NATURE')
+            OBJsettings%mesh_nature = trim(val)
 
          case ('DEM_FILE')
             OBJsettings%dem_file = trim(val)
@@ -186,30 +178,29 @@ contains
          case ('EDGES')
             read (val, *) OBJparamRefi%edges
 
-         !## => Refinement for mesh parameter based on spheres
-        case ('PARAM_ESFER')
-         read(val, *) OBJmodReg%NparamEsfer
+            !## => Refinement for mesh parameter based on spheres
+         case ('PARAM_ESFER')
+            read (val, *) OBJmodReg%NparamEsfer
 
-         if (allocated(OBJmodReg%radiusForEsfer)) deallocate(OBJmodReg%radiusForEsfer)
-         if (allocated(OBJmodReg%edgesForEsfer))   deallocate(OBJmodReg%edgesForEsfer)
-         allocate(OBJmodReg%radiusForEsfer(OBJmodReg%NparamEsfer))
-         allocate(OBJmodReg%edgesForEsfer(OBJmodReg%NparamEsfer))
+            if (allocated(OBJmodReg%radiusForEsfer)) deallocate (OBJmodReg%radiusForEsfer)
+            if (allocated(OBJmodReg%edgesForEsfer)) deallocate (OBJmodReg%edgesForEsfer)
+            allocate (OBJmodReg%radiusForEsfer(OBJmodReg%NparamEsfer))
+            allocate (OBJmodReg%edgesForEsfer(OBJmodReg%NparamEsfer))
 
-        case ('PARAM_RADIOS')
-          if (.not. allocated(OBJmodReg%radiusForEsfer)) then
-             write(*,*) 'ERROR: EDGES defined before paramESFERAS'
-             stop
-          end if
-          read(val, *) OBJmodReg%radiusForEsfer
-        case ('PARAM_EDGES')
-          if (.not. allocated(OBJmodReg%edgesForEsfer)) then
-             write(*,*) 'ERROR: EDGES defined before paramESFERAS'
-             stop
-          end if
-          read(val, *) OBJmodReg%edgesForEsfer
+         case ('PARAM_RADIOS')
+            if (.not. allocated(OBJmodReg%radiusForEsfer)) then
+               write (*, *) 'ERROR: EDGES defined before paramESFERAS'
+               stop
+            end if
+            read (val, *) OBJmodReg%radiusForEsfer
+         case ('PARAM_EDGES')
+            if (.not. allocated(OBJmodReg%edgesForEsfer)) then
+               write (*, *) 'ERROR: EDGES defined before paramESFERAS'
+               stop
+            end if
+            read (val, *) OBJmodReg%edgesForEsfer
 
-
-         !## => Regions Atributes in the model
+            !## => Regions Atributes in the model
          case ('REGIONS')
             read (val, *) OBJmodReg%Nregions
 
@@ -220,8 +211,8 @@ contains
             allocate (OBJmodReg%ID(OBJmodReg%Nregions))
             allocate (OBJmodReg%rho(OBJmodReg%Nregions))
             allocate (OBJmodReg%coord(3, OBJmodReg%Nregions))
-            allocate(OBJmodReg%repeatPartition(OBJmodReg%Nregions))
-            allocate(OBJmodReg%isRHOfix(OBJmodReg%Nregions))
+            allocate (OBJmodReg%repeatPartition(OBJmodReg%Nregions))
+            allocate (OBJmodReg%isRHOfix(OBJmodReg%Nregions))
             allocate (temp_vec(3*OBJmodReg%Nregions))
 
          case ('LOCATION')
@@ -231,52 +222,51 @@ contains
 
          case ('ID_REGION')
             read (val, *) OBJmodReg%ID
-            print*, 'ID regions', OBJmodReg%id
+            print *, 'ID regions', OBJmodReg%id
 
          case ('RHO_REGIONS')
-         if (.not. allocated(OBJmodReg%rho)) then
-            write(*,*) 'ERROR: RHO_REGIONS defined before REGIONS'
-            stop
-         end if
+            if (.not. allocated(OBJmodReg%rho)) then
+               write (*, *) 'ERROR: RHO_REGIONS defined before REGIONS'
+               stop
+            end if
 
             read (val, *) OBJmodReg%rho
 
-         print*,'rho region',OBJmodReg%rho
-        case ('REP_PARTITION')
-          if (.not. allocated(OBJmodReg%repeatPartition)) then
-            write(*,*) 'ERROR: REP_PARTITION defined before REGIONS'
-            stop
-          end if
-          read(val, *) OBJmodReg%repeatPartition
-         print*, 'size repeatPartition=', size(OBJmodReg%repeatPartition)
-         print*,'rep partiton',OBJmodReg%repeatPartition
+            print *, 'rho region', OBJmodReg%rho
+         case ('REP_PARTITION')
+            if (.not. allocated(OBJmodReg%repeatPartition)) then
+               write (*, *) 'ERROR: REP_PARTITION defined before REGIONS'
+               stop
+            end if
+            read (val, *) OBJmodReg%repeatPartition
+            print *, 'size repeatPartition=', size(OBJmodReg%repeatPartition)
+            print *, 'rep partiton', OBJmodReg%repeatPartition
 
-        case ('FIX_RESISTIVITY')
-          if (.not. allocated(OBJmodReg%isRHOfix )) then
-            write(*,*) 'ERROR: FIX_RESISTIVITY defined before REGIONS'
-            stop
-          end if
-          read(val, *) OBJmodReg%isRHOfix
-         print*,'FIX_RESISTIVITY',OBJmodReg%isRHOfix
+         case ('FIX_RESISTIVITY')
+            if (.not. allocated(OBJmodReg%isRHOfix)) then
+               write (*, *) 'ERROR: FIX_RESISTIVITY defined before REGIONS'
+               stop
+            end if
+            read (val, *) OBJmodReg%isRHOfix
+            print *, 'FIX_RESISTIVITY', OBJmodReg%isRHOfix
 
-         !## => Refinement for sites at the volumetric mesh
+            !## => Refinement for sites at the volumetric mesh
          case ('SITE_ELLIPSES')
-           read(val, *) OBJglobRefi%n_ellipses_site
+            read (val, *) OBJglobRefi%n_ellipses_site
 
-           if (allocated(OBJglobRefi%maxSiteEdge)) deallocate(OBJglobRefi%maxSiteEdge)
-           if (allocated(OBJglobRefi%lenEllipseSite))   deallocate(OBJglobRefi%lenEllipseSite)
-           allocate(OBJglobRefi%maxSiteEdge(OBJglobRefi%n_ellipses_site))
-           ALLOCATE(OBJglobRefi%lenEllipseSite(OBJglobRefi%n_ellipses_site))
-         
+            if (allocated(OBJglobRefi%maxSiteEdge)) deallocate (OBJglobRefi%maxSiteEdge)
+            if (allocated(OBJglobRefi%lenEllipseSite)) deallocate (OBJglobRefi%lenEllipseSite)
+            allocate (OBJglobRefi%maxSiteEdge(OBJglobRefi%n_ellipses_site))
+            ALLOCATE (OBJglobRefi%lenEllipseSite(OBJglobRefi%n_ellipses_site))
+
          case ('MAX_EDGE_LEN')
-           read(val,*) OBJglobRefi%maxSiteEdge
+            read (val, *) OBJglobRefi%maxSiteEdge
 
-         case ('LEN_ELLIPSE' )
-           read(val,*) OBJglobRefi%lenEllipseSite
+         case ('LEN_ELLIPSE')
+            read (val, *) OBJglobRefi%lenEllipseSite
 
-         !## => Iterative tetgen refinement
-         case ('TET_REFINEMENT'); read(val, *) OBJglobRefi%n_iterative_refi
-
+            !## => Iterative tetgen refinement
+         case ('TET_REFINEMENT'); read (val, *) OBJglobRefi%n_iterative_refi
 
          end select
 
@@ -292,7 +282,7 @@ contains
 
       use mesh_config
       implicit none
-      
+
       type(MeshSettings), intent(in) :: OBJsettings
       real(dp), allocatable, intent(out):: x(:), y(:), z(:)
       integer, intent(out):: n
@@ -304,7 +294,7 @@ contains
       scale = 1.0_dp
       if (settings%dem_units == 'meters') scale = 1.0d-3
 
-      open (newunit=iu, file='../preprocessing/DEM/'//OBJsettings%dem_file , status='old')
+      open (newunit=iu, file='../preprocessing/DEM/'//OBJsettings%dem_file, status='old')
       n = 0
       do
          read (iu, *, end=10)
@@ -671,7 +661,7 @@ contains
       !     dir = '../preprocessing'
       !y esto es asi porque meshtran se ejecutara en bin/ y debe subir un nivel in entrar
       !en preprocessing
-   
+
       ! ==========================
       ! Write SITE coordinates
       ! ==========================
@@ -813,7 +803,7 @@ contains
    subroutine define_analysis_domain(settings)
       implicit none
       type(MeshSettings), INTENT(IN) :: settings
-         
+
       integer:: iu
 
       ! xmin =  - pad_x
@@ -831,14 +821,14 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_topography(OBJsettings, x, y, z, n )
+   subroutine write_topography(OBJsettings, x, y, z, n)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
       real(dp), intent(in)    :: x(:), y(:)
       integer, intent(in)     :: n
       real(dp), INTENT(INOUT) :: z(:)
       integer                 :: i, iu
-         
+
       z = z/1000.0d0
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
@@ -890,7 +880,7 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_coast_line(settings) 
+   subroutine write_coast_line(settings)
 
       implicit none
       type(MeshSettings), INTENT(IN) :: settings
@@ -933,7 +923,9 @@ contains
       ! -----------------------------
       call execute_command_line('echo " "')
       call execute_command_line('echo "--Running makeTetraMesh..."')
-      call execute_command_line('cd buildMesh && cp ../input_data/geometry/* .', &
+      !    execute_command_line('cd buildMesh && cp ../input_data/geometry/* .', &
+
+      call execute_command_line('cd ../preprocessing/buildMesh && cp ../geometry/* .', &
                                 wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: copying geometry failed'
       call execute_command_line('echo " "')
@@ -942,28 +934,28 @@ contains
       ! 3. Ejecutar steps 1–4
       ! -----------------------------
       call execute_command_line('echo "step 1 --> Defining Land/Sea Boundary"')
-      call execute_command_line('cd buildMesh && makeTetraMesh -stp 1', wait=.true., exitstat=stat)
+      call execute_command_line('cd ../preprocessing/buildMesh && pwd && makeTetraMesh -stp 1', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 1 failed'
       end if
       call execute_command_line('echo "done..." && sleep 1')
 
       call execute_command_line('echo "step 2 --> Building 2D mesh..."')
-      call execute_command_line('cd buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
+      call execute_command_line('cd ../preprocessing/buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 2 failed'
       end if
       call execute_command_line('echo "done..." && sleep 1')
 
       call execute_command_line('echo "step 3 --> Interpolating altitudes"')
-      call execute_command_line('cd buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
+      call execute_command_line('cd ../preprocessing/buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 3 failed'
       end if
       call execute_command_line('echo "done..." && sleep 1')
 
       call execute_command_line('echo "step 4 --> Making surface mesh"')
-      call execute_command_line('cd buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
+      call execute_command_line('cd ../preprocessing/buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 4 failed'
       end if
@@ -972,7 +964,7 @@ contains
       ! -----------------------------
       ! 4. Verificar output.poly
       ! -----------------------------
-      inquire (file='buildMesh/output.poly', exist=ex)
+      inquire (file='../preprocessing/buildMesh/output.poly', exist=ex)
       if (.not. ex) stop 'ERROR: output.poly was not generated'
 
       ! -----------------------------
@@ -984,8 +976,8 @@ contains
 
       call execute_command_line('echo " " ')
       call execute_command_line('echo "Assigning regions in output.poly file"')
-      open (newunit=iu_in, file='buildMesh/output.poly', status='old')
-      open (newunit=iu_out, file='buildMesh/output.poly.tmp', status='replace')
+      open (newunit=iu_in, file='../preprocessing/buildMesh/output.poly', status='old')
+      open (newunit=iu_out, file='../preprocessing/buildMesh/output.poly.tmp', status='replace')
 
       !
       !   read(iu_in, '(A)', end=100) line
@@ -1035,7 +1027,7 @@ contains
       close (iu_in)
       close (iu_out)
 
-      call execute_command_line('mv buildMesh/output.poly.tmp buildMesh/output.poly')
+      call execute_command_line('mv ../preprocessing/buildMesh/output.poly.tmp ../preprocessing/buildMesh/output.poly')
 
       write (*, *) 'Ok: ✅ makeTetraMesh steps 1–4 done and regions added to output.poly'
 
@@ -1043,7 +1035,7 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine setGlobalMeshRefinement(xcenter, ycenter, Nglob_ellipses, corXsite, corYsite, nSites, OBJglobRefi )
+   subroutine setGlobalMeshRefinement(xcenter, ycenter, Nglob_ellipses, corXsite, corYsite, nSites, OBJglobRefi)
 
       implicit none
       type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
@@ -1087,7 +1079,7 @@ contains
       end do
 
       close (iu)
-      print *, 'Archivo makeMtr.param creado exitosamente en ',trim(outdir)
+      print *, 'Archivo makeMtr.param creado exitosamente en ', trim(outdir)
 
       oblatness_on_ZXplane = 0.3
 
@@ -1105,23 +1097,23 @@ contains
       do i = 1, nSites
          ! X  Y  z0
          write (iu, '(3F15.6 )') corXsite(i), corYsite(i), z0
-         write (iu, '(I1)') OBJglobRefi%n_ellipses_site 
+         write (iu, '(I1)') OBJglobRefi%n_ellipses_site
 
          ! (Ri, Li) pairs
-         do k = 1, OBJglobRefi%n_ellipses_site 
-            write (iu, '(3F5.2 )')&
-            OBJglobRefi%lenEllipseSite(k), OBJglobRefi%maxSiteEdge(k), oblatness_on_zxplane
+         do k = 1, OBJglobRefi%n_ellipses_site
+            write (iu, '(3F5.2 )') &
+               OBJglobRefi%lenEllipseSite(k), OBJglobRefi%maxSiteEdge(k), oblatness_on_zxplane
          end do
       end do
 
       close (iu)
-      print *, 'Archivo obs_site.dat creado exitosamente en ',trim(outdir)
+      print *, 'Archivo obs_site.dat creado exitosamente en ', trim(outdir)
 
    end subroutine setGlobalMeshRefinement
 !=========================================================
 !=======
 !=========================================================
-   subroutine resistivitty_attribute( Nsites, coorXsite, coorYsite, coorZsite, OBJmodReg)
+   subroutine resistivitty_attribute(Nsites, coorXsite, coorYsite, coorZsite, OBJmodReg)
 
       implicit none
 
@@ -1161,7 +1153,7 @@ contains
       write (iu, '(I2)') OBJmodReg%Nregions
       do j = 1, OBJmodReg%Nregions
          !write (iu, '(I0, 2X, ES10.3, 1X, I3, 1X, I3)') ID_regions(j), rhoRegions(j), repRegion(j), fixed(j)
-         write (iu, '(I0,2X,ES10.3,2(1X,I3))') OBJmodReg%ID(j), OBJmodReg%rho(j), OBJmodReg%repeatPartition(j), OBJmodReg%isRHOfix(j)
+        write (iu, '(I0,2X,ES10.3,2(1X,I3))') OBJmodReg%ID(j), OBJmodReg%rho(j), OBJmodReg%repeatPartition(j), OBJmodReg%isRHOfix(j)
       end do
 
       ! -----------------------------------------------------------
@@ -1192,9 +1184,188 @@ contains
       end do
 
       close (iu)
-      print *, 'file resistivity_attr.dat escrito exitosamente en ',trim(outdir)
+      print *, 'file resistivity_attr.dat escrito exitosamente en ', trim(outdir)
 
    end subroutine resistivitty_attribute
+!=========================================================
+!=======
+!=========================================================
+   subroutine mesh_convertion(OBJsetting)
+      implicit none
+
+      type(MeshSettings), intent(in) :: OBJsetting
+      character(len=20) :: check
+      integer :: stat
+
+      check = OBJsetting%mesh_nature
+      check = trim(check)
+
+      select case (check)
+      case ("native")
+         print *, "No mesh convertion, building native mesh"
+
+      case ("external")
+
+         call EXECUTE_COMMAND_LINE('echo " " ')
+         call execute_command_line('echo "step1 --> running meshio to convert the mesh " ')
+         call EXECUTE_COMMAND_LINE('cd ../preprocessing/buildMesh && cp ../geometry/external.nas . ')
+         call EXECUTE_COMMAND_LINE('meshio convert external.nas output.ele', wait=.true., exitstat=stat)
+         if (stat /= 0) then
+            error stop 'ERROR: tetgen execution failed'
+         end if
+         call execute_command_line('echo "done..." && sleep 1')
+
+
+         call EXECUTE_COMMAND_LINE('echo " " ')
+      call execute_command_line('echo "step 2 --> reindexing converted files to 1 based enumeration" ')
+         call EXECUTE_COMMAND_LINE('cd ../preprocessing/buildMesh && cp ../geometry/output.* .')
+         call EXECUTE_COMMAND_LINE('cd ../preprocessing/buildMesh && ./reindex_tetgen_1based.py output', wait=.true., exitstat=stat )
+         if (stat /= 0) then
+            error stop 'ERROR: tetgen execution failed'
+         end if
+
+
+         call execute_command_line('echo "step 3 --> running tetgen to build face, neigh and edge files" ')
+         call execute_command_line('cd ../preprocessing/buildMesh && tetgen -n output_1b.ele', wait=.true., exitstat=stat)
+         if (stat /= 0) then
+            error stop 'ERROR: tetgen execution failed'
+         end if
+      end select
+
+   end subroutine mesh_convertion
+!=========================================================
+!=======
+!=========================================================
+   ! subroutine reindex_tetgen_files(basename)
+   !
+   !    implicit none
+   !    character(len=*), intent(in) :: basename
+   !
+   !    character(len=256) :: node_in, node_out
+   !    character(len=256) :: ele_in, ele_out
+   !    character(len=512) :: line
+   !    integer :: iu_in, iu_out
+   !    integer :: ios
+   !    logical :: header_done
+   !    integer :: id, n1, n2, n3, n4
+   !    integer :: attr
+   !    integer :: min_id
+   !    integer :: first_data_id
+   !    logical :: need_reindex
+   !
+   !    node_in = trim(basename)//'.node'
+   !    node_out = trim(basename)//'_1b.node'
+   !    ele_in = trim(basename)//'.ele'
+   !    ele_out = trim(basename)//'_1b.ele'
+   !
+   !    ! ----------------------------------------
+   !    ! Detect if node file is 0-based
+   !    ! ----------------------------------------
+   !
+   !    need_reindex = .false.
+   !    header_done = .false.
+   !
+   !    open (newunit=iu_in, file=node_in, status='old', action='read')
+   !
+   !    do
+   !       read (iu_in, '(A)', iostat=ios) line
+   !       if (ios /= 0) exit
+   !
+   !       if (line(1:1) == '#' .or. len_trim(line) == 0) cycle
+   !
+   !       if (.not. header_done) then
+   !          header_done = .true.
+   !          cycle
+   !       end if
+   !
+   !       read (line, *) first_data_id
+   !       if (first_data_id == 0) need_reindex = .true.
+   !       exit
+   !    end do
+   !
+   !    close (iu_in)
+   !
+   !    if (.not. need_reindex) then
+   !       print *, 'Mesh already 1-based. No reindex needed.'
+   !       return
+   !    end if
+   !
+   !    print *, 'Reindexing mesh from 0-based to 1-based...'
+   !
+   !    ! ----------------------------------------
+   !    ! Reindex NODE file
+   !    ! ----------------------------------------
+   !
+   !    header_done = .false.
+   !
+   !    open (newunit=iu_in, file=node_in, status='old', action='read')
+   !    open (newunit=iu_out, file=node_out, status='replace', action='write')
+   !
+   !    do
+   !       read (iu_in, '(A)', iostat=ios) line
+   !       if (ios /= 0) exit
+   !
+   !       if (line(1:1) == '#' .or. len_trim(line) == 0) then
+   !          write (iu_out, '(A)') trim(line)
+   !          cycle
+   !       end if
+   !
+   !       if (.not. header_done) then
+   !          write (iu_out, '(A)') trim(line)
+   !          header_done = .true.
+   !          cycle
+   !       end if
+   !
+   !       read (line, *) id
+   !       write (iu_out, '(I0,1X,A)') id + 1, adjustl(line(index(line, ' '):))
+   !
+   !    end do
+   !
+   !    close (iu_in)
+   !    close (iu_out)
+   !
+   !    ! ----------------------------------------
+   !    ! Reindex ELE file
+   !    ! ----------------------------------------
+   !
+   !    header_done = .false.
+   !
+   !    open (newunit=iu_in, file=ele_in, status='old', action='read')
+   !    open (newunit=iu_out, file=ele_out, status='replace', action='write')
+   !
+   !    do
+   !       read (iu_in, '(A)', iostat=ios) line
+   !       if (ios /= 0) exit
+   !
+   !       if (line(1:1) == '#' .or. len_trim(line) == 0) then
+   !          write (iu_out, '(A)') trim(line)
+   !          cycle
+   !       end if
+   !
+   !       if (.not. header_done) then
+   !          write (iu_out, '(A)') trim(line)
+   !          header_done = .true.
+   !          cycle
+   !       end if
+   !
+   !       ! Leer primeros 5 enteros (id + 4 nodos)
+   !       read (line, *) id, n1, n2, n3, n4
+   !
+   !       ! Escribir reindexado y conservar resto de línea (atributos)
+   !       write (iu_out, '(I0,1X,I0,1X,I0,1X,I0,1X,I0,1X,A)') &
+   !          id + 1, n1 + 1, n2 + 1, n3 + 1, n4 + 1, &
+   !          adjustl(line(scan(line, ' ', .false., 5):))
+   !
+   !    end do
+   !
+   !    close (iu_in)
+   !    close (iu_out)
+   !
+   !    print *, 'Reindex completed.'
+   !    print *, 'Created: ', trim(node_out)
+   !    print *, 'Created: ', trim(ele_out)
+   !
+   ! end subroutine reindex_tetgen_files
 !=========================================================
 !=======
 !=========================================================
@@ -1210,14 +1381,14 @@ contains
       ! -----------------------------
       call execute_command_line('echo " "')
       call execute_command_line('echo "running tetgen --> Building 2D Mesh including topography"')
-      call execute_command_line('cd buildMesh && tetgen -nVpYAakq3.0/0 output.poly', wait=.true., exitstat=stat)
+      call execute_command_line('cd ../preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: tetgen execution failed'
       end if
-      call execute_command_line(' cd buildMesh && head output.1.ele')
+      call execute_command_line(' cd ../preprocessing/buildMesh && head output.1.ele')
       call execute_command_line('echo "done..." && sleep 3')
       call execute_command_line('echo " " ')
-      call execute_command_line('echo " Preparing mesh refinement " && cd buildMesh && mkdir -p refinement', &
+      call execute_command_line('echo " Preparing mesh refinement " && cd ../preprocessing/buildMesh && mkdir -p refinement', &
                                 wait=.true., exitstat=stat)
       if (stat /= 0) error stop 'ERROR: could not create refinement directory'
 
@@ -1228,9 +1399,8 @@ contains
       !     error stop 'ERROR: refinement directory does not exist.'
       ! endif
 
-      call execute_command_line('cd buildMesh && cp output.1* refinement')
-      pause
-      call execute_command_line('cd buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
+      call execute_command_line('cd ../preprocessing/buildMesh && cp output.1* refinement')
+  call execute_command_line('cd ../preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: there is no files content refinement parameters'
 
       ! --------------------------------------------------
@@ -1239,16 +1409,15 @@ contains
       ! --------------------------------------------------
       do r = 1, OBJmodReg%n_iterative_refi - 1
 
-         write (cmd, '(A,I0,A)') 'cd buildMesh/refinement && head output.', r, '.ele'
+         write (cmd, '(A,I0,A)') 'cd ../preprocessing/buildMesh/refinement && head output.', r, '.ele'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          write (*, '(A,I0)') 'Refinement iteration: ', r
-         pause
          ! makeMtr output.$r
-         write (cmd, '(A,I0)') 'cd buildMesh/refinement && makeMtr output.', r
+         write (cmd, '(A,I0)') 'cd ../preprocessing/buildMesh/refinement && makeMtr output.', r
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in makeMtr'
          ! tetgen ... output.$r
-         write (cmd, '(A,I0)') 'cd buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', r
+         write (cmd, '(A,I0)') 'cd ../preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', r
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in tetgen refinement'
 
@@ -1260,47 +1429,71 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine run_TetGen2Femtic(OBJglobRefi)
+   subroutine run_TetGen2Femtic(OBJsettings, OBJglobRefi)
       implicit none
 
-      type(GlobalRefinement), intent(in) :: OBJglobRefi
+      type(GlobalRefinement), intent(inout) :: OBJglobRefi
+      type(MeshSettings), intent(in) :: OBJsettings
       character(len=256) :: cmd, fname
       integer :: stat
       logical :: ex1, ex2, ex3
 
       call execute_command_line('echo " "')
       call execute_command_line('echo "Final step: tetgen2femtic execution"')
-      call execute_command_line('cd buildMesh && mkdir -p tetgenTOfemtic', wait=.true., exitstat=stat)
+      call execute_command_line('cd ../preprocessing/buildMesh && mkdir -p tetgenTOfemtic', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: could not be created tetgenTOfemtic directory'
       end if
-      ! Copiar el último refinement
-      write (cmd, '(A,I0,A)') 'cd buildMesh && cp refinement/output.', OBJglobRefi%n_iterative_refi, '* tetgenTOfemtic'
-      call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
-      if (stat /= 0) error stop 'ERROR copying final refinement to tetgenTOfemtic folder'
 
-      call execute_command_line('cd buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
+      select case (OBJsettings%mesh_nature)
+         case ('native')
+            ! Copiar el último refinement
+            write (cmd, '(A,I0,A)') 'cd ../preprocessing/buildMesh && cp refinement/output.', OBJglobRefi%n_iterative_refi, '* tetgenTOfemtic'
+            call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+            if (stat /= 0) error stop 'ERROR copying final refinement to tetgenTOfemtic folder'
+            
+            call execute_command_line('cd ../preprocessing/buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
+            
+            ! Ejecutar TetGen2Femtic con el último número
+            write (cmd, '(A,I0)') 'cd ../preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output.', OBJglobRefi%n_iterative_refi
+            call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+            if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
+            
+            call execute_command_line('echo "done..." && sleep 1')
+            
+            ! write (cmd, '(A,I0,A)') 'cp ../preprocessing/buildMesh/tetgenTOfemtic/{mesh.dat,resistivity_block_iter0.dat,output.', &
+            !    OBJglobRefi%n_iterative_refi, '.femtic.vtk} ../preprocessing/inv'
+            ! call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
 
-      ! Ejecutar TetGen2Femtic con el último número
-      write (cmd, '(A,I0)') 'cd buildMesh/tetgenTOfemtic && TetGen2Femtic output.', OBJglobRefi%n_iterative_refi
-      call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
-      if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
+         case('external')
+            
+            OBJglobRefi%n_iterative_refi  = 1
 
-      call execute_command_line('echo "done..." && sleep 1')
+            write (cmd, '(A,I0,A)') 'cd ../preprocessing/buildMesh && cp output_1b.1* tetgenTOfemtic'
+            call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+            if (stat /= 0) error stop 'ERROR copying converted final files to tetgenTOfemtic folder'
 
-      write (cmd, '(A,I0,A)') 'cp buildMesh/tetgenTOfemtic/&
-    &      {mesh.dat,resistivity_block_iter0.dat,output.', OBJglobRefi%n_iterative_refi, '.femtic.vtk} input_data/inv'
+            call execute_command_line('cd ../preprocessing/buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
+
+            ! Ejecutar TetGen2Femtic con el último número
+            write (cmd, '(A,I0)') 'cd ../preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output_1b.', OBJglobRefi%n_iterative_refi
+            call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+            if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
+
+      end select
+   
+      write (cmd, '(A,I0,A)') 'cp ../preprocessing/buildMesh/tetgenTOfemtic/{mesh.dat,resistivity_block_iter0.dat,output.', &
+         OBJglobRefi%n_iterative_refi, '.femtic.vtk} ../preprocessing/inv'
       call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
 
       ! Verificación
-      inquire (file='input_data/inv/mesh.dat', exist=ex1)
-      inquire (file='input_data/inv/resistivity_block_iter0.dat', exist=ex2)
-
-      write (fname, '(A,I0,A)') 'input_data/inv/output.', OBJglobRefi%n_iterative_refi, '.femtic.vtk'
+      inquire (file='../preprocessing/inv/mesh.dat', exist=ex1)
+      inquire (file='../preprocessing/inv/resistivity_block_iter0.dat', exist=ex2)
+      write (fname, '(A,I0,A)') '../preprocessing/inv/output.', OBJglobRefi%n_iterative_refi, '.femtic.vtk'
       inquire (file=fname, exist=ex3)
 
       if (ex1 .and. ex2 .and. ex3) then
-         write (*, *) 'Input files for running Femtic are successfully copied to input_data/inv'
+         write (*, *) 'Input files for running Femtic are successfully copied to preprocessing/inv'
       else
          write (*, *) 'ERROR: Missing files after copy.'
          write (*, *) 'mesh.dat exists? ', ex1
@@ -1308,7 +1501,6 @@ contains
          write (*, *) 'vtk exists? ', ex3
          error stop
       end if
-
       call execute_command_line('echo " " ')
       call execute_command_line('echo " 🏁 Finishing meshTran execution..." && sleep 3')
 
