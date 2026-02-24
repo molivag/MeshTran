@@ -2,6 +2,9 @@ preprocessing/
 buildMesh/
 _buildMesh1/
 _buildMesh2/
+input_data/
+last_builMesh/
+
 *.xyz
 *.dat
 *.ipynb
