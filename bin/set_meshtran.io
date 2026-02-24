@@ -4,6 +4,7 @@
 *
 *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 
+MESH_NATURE = native
 
 DEM_FILE = TOTPO_KAL_BBMT_FLAT_475m.xyz
 DEM_UNITS = kilometers 
@@ -55,5 +56,5 @@ ROTATION=0.0
 NUM_ELIPSES=10
 
 ## => Iterative tetgen refinement
-TET_REFINEMENT=3
+TET_REFINEMENT= 2
 
