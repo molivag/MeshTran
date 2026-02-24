@@ -7,12 +7,13 @@ module mesh_config
    type :: MeshSettings
 
       ! ----- Archivos -----
-      character(len=156) :: dem_file
-      character(len=156) :: dem_units
+      character(len=150) :: dem_file
+      character(len=50) :: dem_units
+      character(len=20) :: mesh_nature
       ! character(len=156) :: outdir
-      character(len=156) :: topography_file
-      character(len=156) :: bathymetry_file
-      character(len=156) :: coastLine_file
+      character(len=100) :: topography_file
+      character(len=100) :: bathymetry_file
+      character(len=100) :: coastLine_file
 
       ! ----- Dominio -----
       logical :: has_sea
