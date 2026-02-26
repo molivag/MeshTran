@@ -2,7 +2,7 @@ module mesh_config
 
    implicit none
    integer, parameter :: dp = kind(1.0d0)
-   CHARACTER(len=50),PARAMETER :: outdir ='../preprocessing/geometry/'
+   CHARACTER(len=50),PARAMETER :: outdir ='preprocessing/geometry/'
 
    type :: MeshSettings
 
