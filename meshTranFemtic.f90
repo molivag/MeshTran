@@ -24,19 +24,6 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-
-
-logical :: ex
-
-fname = "set_meshtran.io"
-inquire(file=fname, exist=ex)
-
-if (.not. ex) then
-    fname = "bin/set_meshtran.io"
-end if
-
-
-
    call read_set_femtic('bin/set_meshtran.io', settings, paramRefi, globRefi, regions)
    !---------------------------------------------------
    !     Check if Read input configutation file
