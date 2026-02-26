@@ -11,20 +11,33 @@ program femtic_mesh_driver
    type(SiteSet) :: sites
 
    ! Control parameters
-   character(len=256), allocatable:: edi_files(:), edi_id(:)
+   character(len=256), allocatable:: edi_files(:), edi_id(:), fname
    logical:: has_sea
    real(dp):: xminDOM, xmaxDOM, yminDOM, ymaxDOM!, zminDOM, zmaxDOM
    real(dp), allocatable:: edi_lat(:), edi_lon(:), edi_elev(:),  site_x_km(:), site_y_km(:), dem_x_km(:), dem_y_km(:)
    real(dp):: pad_x, pad_y, sea_level, x0, y0
 
    ! DEM data
-   integer:: n_dem, zone, n_edi_files, n_sites!, Nsph, n_elipses, ellipsForSite, NparamEsfer, Nregions, refi_tetgen
+   integer:: i,n_dem, zone, n_edi_files, n_sites!, Nsph, n_elipses, ellipsForSite, NparamEsfer, Nregions, refi_tetgen
    real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
 
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-   call read_set_femtic("set_meshtran.io", settings, paramRefi, globRefi, regions)
+
+
+logical :: ex
+
+fname = "set_meshtran.io"
+inquire(file=fname, exist=ex)
+
+if (.not. ex) then
+    fname = "bin/set_meshtran.io"
+end if
+
+
+
+   call read_set_femtic('bin/set_meshtran.io', settings, paramRefi, globRefi, regions)
    !---------------------------------------------------
    !     Check if Read input configutation file
    !---------------------------------------------------
@@ -63,7 +76,6 @@ program femtic_mesh_driver
    !     Compute anchor point (central point) of analysis domain based on sites locations
    !---------------------------------------------------
    call compute_center(site_x_km, site_y_km, n_edi_files, x0, y0)
-
    !---------------------------------------------------
    !     Recenter
    !---------------------------------------------------
@@ -294,7 +306,7 @@ contains
       scale = 1.0_dp
       if (settings%dem_units == 'meters') scale = 1.0d-3
 
-      open (newunit=iu, file='../preprocessing/DEM/'//OBJsettings%dem_file, status='old')
+      open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
       n = 0
       do
          read (iu, *, end=10)
@@ -435,11 +447,11 @@ contains
       ! 1) Listar archivos EDI usando el sistema
       !------------------------------------------------------------
       call execute_command_line( &
-         "ls ../preprocessing/edi_files/*.edi > "//tmpfile, &
+         "ls preprocessing/edi_files/*.edi > "//tmpfile, &
          exitstat=ios)
 
       if (ios /= 0) then
-         write (error_unit, *) "ERROR: failed to list ../preprocessing/edi_files/*.edi"
+         write (error_unit, *) "ERROR: failed to list preprocessing/edi_files/*.edi"
          stop
       end if
 
@@ -655,7 +667,7 @@ contains
       demXkm = demXmts
       demYkm = demYmts
 
-      dir = '../preprocessing/'
+      dir = 'preprocessing/'
       ! ojo aqui cuando meshtran se pase a la estructura de folders de mtif entonces la ruta
       !debera ser:
       !     dir = '../preprocessing'
@@ -729,6 +741,7 @@ contains
       end do
 
       ! Writing final coordinate site files
+      print*, trim(outdir)
       fname = trim(outdir)//'sites_coord_elev.dat'
       open (newunit=iu, file=fname, status='replace', action='write')
       do i = 1, n_sites
@@ -925,7 +938,7 @@ contains
       call execute_command_line('echo "--Running makeTetraMesh..."')
       !    execute_command_line('cd buildMesh && cp ../input_data/geometry/* .', &
 
-      call execute_command_line('cd ../preprocessing/buildMesh && cp ../geometry/* .', &
+      call execute_command_line('cd preprocessing/buildMesh && cp ../geometry/* .', &
                                 wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: copying geometry failed'
       call execute_command_line('echo " "')
@@ -934,28 +947,28 @@ contains
       ! 3. Ejecutar steps 1–4
       ! -----------------------------
       call execute_command_line('echo "step 1 --> Defining Land/Sea Boundary"')
-      call execute_command_line('cd ../preprocessing/buildMesh && pwd && makeTetraMesh -stp 1', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 1', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 1 failed'
       end if
       call execute_command_line('echo "done..." && sleep 1')
 
       call execute_command_line('echo "step 2 --> Building 2D mesh..."')
-      call execute_command_line('cd ../preprocessing/buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 2 failed'
       end if
       call execute_command_line('echo "done..." && sleep 1')
 
       call execute_command_line('echo "step 3 --> Interpolating altitudes"')
-      call execute_command_line('cd ../preprocessing/buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 3 failed'
       end if
       call execute_command_line('echo "done..." && sleep 1')
 
       call execute_command_line('echo "step 4 --> Making surface mesh"')
-      call execute_command_line('cd ../preprocessing/buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 4 failed'
       end if
@@ -964,7 +977,7 @@ contains
       ! -----------------------------
       ! 4. Verificar output.poly
       ! -----------------------------
-      inquire (file='../preprocessing/buildMesh/output.poly', exist=ex)
+      inquire (file='preprocessing/buildMesh/output.poly', exist=ex)
       if (.not. ex) stop 'ERROR: output.poly was not generated'
 
       ! -----------------------------
@@ -976,8 +989,8 @@ contains
 
       call execute_command_line('echo " " ')
       call execute_command_line('echo "Assigning regions in output.poly file"')
-      open (newunit=iu_in, file='../preprocessing/buildMesh/output.poly', status='old')
-      open (newunit=iu_out, file='../preprocessing/buildMesh/output.poly.tmp', status='replace')
+      open (newunit=iu_in, file='preprocessing/buildMesh/output.poly', status='old')
+      open (newunit=iu_out, file='preprocessing/buildMesh/output.poly.tmp', status='replace')
 
       !
       !   read(iu_in, '(A)', end=100) line
@@ -1027,7 +1040,7 @@ contains
       close (iu_in)
       close (iu_out)
 
-      call execute_command_line('mv ../preprocessing/buildMesh/output.poly.tmp ../preprocessing/buildMesh/output.poly')
+      call execute_command_line('mv preprocessing/buildMesh/output.poly.tmp preprocessing/buildMesh/output.poly')
 
       write (*, *) 'Ok: ✅ makeTetraMesh steps 1–4 done and regions added to output.poly'
 
@@ -1208,7 +1221,7 @@ contains
 
          call EXECUTE_COMMAND_LINE('echo " " ')
          call execute_command_line('echo "step1 --> running meshio to convert the mesh " ')
-         call EXECUTE_COMMAND_LINE('cd ../preprocessing/buildMesh && cp ../geometry/external.nas . ')
+         call EXECUTE_COMMAND_LINE('cd preprocessing/buildMesh && cp ../geometry/external.nas . ')
          call EXECUTE_COMMAND_LINE('meshio convert external.nas output.ele', wait=.true., exitstat=stat)
          if (stat /= 0) then
             error stop 'ERROR: tetgen execution failed'
@@ -1218,15 +1231,15 @@ contains
 
          call EXECUTE_COMMAND_LINE('echo " " ')
       call execute_command_line('echo "step 2 --> reindexing converted files to 1 based enumeration" ')
-         call EXECUTE_COMMAND_LINE('cd ../preprocessing/buildMesh && cp ../geometry/output.* .')
-         call EXECUTE_COMMAND_LINE('cd ../preprocessing/buildMesh && ./reindex_tetgen_1based.py output', wait=.true., exitstat=stat )
+         call EXECUTE_COMMAND_LINE('cd preprocessing/buildMesh && cp ../geometry/output.* .')
+         call EXECUTE_COMMAND_LINE('cd preprocessing/buildMesh && ./reindex_tetgen_1based.py output', wait=.true., exitstat=stat )
          if (stat /= 0) then
             error stop 'ERROR: tetgen execution failed'
          end if
 
 
          call execute_command_line('echo "step 3 --> running tetgen to build face, neigh and edge files" ')
-         call execute_command_line('cd ../preprocessing/buildMesh && tetgen -n output_1b.ele', wait=.true., exitstat=stat)
+         call execute_command_line('cd preprocessing/buildMesh && tetgen -n output_1b.ele', wait=.true., exitstat=stat)
          if (stat /= 0) then
             error stop 'ERROR: tetgen execution failed'
          end if
@@ -1381,14 +1394,14 @@ contains
       ! -----------------------------
       call execute_command_line('echo " "')
       call execute_command_line('echo "running tetgen --> Building 2D Mesh including topography"')
-      call execute_command_line('cd ../preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: tetgen execution failed'
       end if
-      call execute_command_line(' cd ../preprocessing/buildMesh && head output.1.ele')
+      call execute_command_line(' cd preprocessing/buildMesh && head output.1.ele')
       call execute_command_line('echo "done..." && sleep 3')
       call execute_command_line('echo " " ')
-      call execute_command_line('echo " Preparing mesh refinement " && cd ../preprocessing/buildMesh && mkdir -p refinement', &
+      call execute_command_line('echo " Preparing mesh refinement " && cd preprocessing/buildMesh && mkdir -p refinement', &
                                 wait=.true., exitstat=stat)
       if (stat /= 0) error stop 'ERROR: could not create refinement directory'
 
@@ -1399,8 +1412,8 @@ contains
       !     error stop 'ERROR: refinement directory does not exist.'
       ! endif
 
-      call execute_command_line('cd ../preprocessing/buildMesh && cp output.1* refinement')
-  call execute_command_line('cd ../preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && cp output.1* refinement')
+  call execute_command_line('cd preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: there is no files content refinement parameters'
 
       ! --------------------------------------------------
@@ -1409,15 +1422,15 @@ contains
       ! --------------------------------------------------
       do r = 1, OBJmodReg%n_iterative_refi - 1
 
-         write (cmd, '(A,I0,A)') 'cd ../preprocessing/buildMesh/refinement && head output.', r, '.ele'
+         write (cmd, '(A,I0,A)') 'cd preprocessing/buildMesh/refinement && head output.', r, '.ele'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          write (*, '(A,I0)') 'Refinement iteration: ', r
          ! makeMtr output.$r
-         write (cmd, '(A,I0)') 'cd ../preprocessing/buildMesh/refinement && makeMtr output.', r
+         write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/refinement && makeMtr output.', r
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in makeMtr'
          ! tetgen ... output.$r
-         write (cmd, '(A,I0)') 'cd ../preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', r
+         write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', r
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in tetgen refinement'
 
@@ -1440,7 +1453,7 @@ contains
 
       call execute_command_line('echo " "')
       call execute_command_line('echo "Final step: tetgen2femtic execution"')
-      call execute_command_line('cd ../preprocessing/buildMesh && mkdir -p tetgenTOfemtic', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && mkdir -p tetgenTOfemtic', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: could not be created tetgenTOfemtic directory'
       end if
@@ -1448,14 +1461,14 @@ contains
       select case (OBJsettings%mesh_nature)
          case ('native')
             ! Copiar el último refinement
-            write (cmd, '(A,I0,A)') 'cd ../preprocessing/buildMesh && cp refinement/output.', OBJglobRefi%n_iterative_refi, '* tetgenTOfemtic'
+            write (cmd, '(A,I0,A)') 'cd preprocessing/buildMesh && cp refinement/output.', OBJglobRefi%n_iterative_refi, '* tetgenTOfemtic'
             call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
             if (stat /= 0) error stop 'ERROR copying final refinement to tetgenTOfemtic folder'
             
-            call execute_command_line('cd ../preprocessing/buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
+            call execute_command_line('cd preprocessing/buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
             
             ! Ejecutar TetGen2Femtic con el último número
-            write (cmd, '(A,I0)') 'cd ../preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output.', OBJglobRefi%n_iterative_refi
+            write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output.', OBJglobRefi%n_iterative_refi
             call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
             if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
             
@@ -1469,31 +1482,31 @@ contains
             
             OBJglobRefi%n_iterative_refi  = 1
 
-            write (cmd, '(A,I0,A)') 'cd ../preprocessing/buildMesh && cp output_1b.1* tetgenTOfemtic'
+            write (cmd, '(A,I0,A)') 'cd preprocessing/buildMesh && cp output_1b.1* tetgenTOfemtic'
             call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
             if (stat /= 0) error stop 'ERROR copying converted final files to tetgenTOfemtic folder'
 
-            call execute_command_line('cd ../preprocessing/buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
+            call execute_command_line('cd preprocessing/buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
 
             ! Ejecutar TetGen2Femtic con el último número
-            write (cmd, '(A,I0)') 'cd ../preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output_1b.', OBJglobRefi%n_iterative_refi
+            write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output_1b.', OBJglobRefi%n_iterative_refi
             call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
             if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
 
       end select
    
-      write (cmd, '(A,I0,A)') 'cp ../preprocessing/buildMesh/tetgenTOfemtic/{mesh.dat,resistivity_block_iter0.dat,output.', &
-         OBJglobRefi%n_iterative_refi, '.femtic.vtk} ../preprocessing/inv'
+      write (cmd, '(A,I0,A)') 'cp preprocessing/buildMesh/tetgenTOfemtic/{mesh.dat,resistivity_block_iter0.dat,output.', &
+         OBJglobRefi%n_iterative_refi, '.femtic.vtk} computing'
       call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
 
       ! Verificación
-      inquire (file='../preprocessing/inv/mesh.dat', exist=ex1)
-      inquire (file='../preprocessing/inv/resistivity_block_iter0.dat', exist=ex2)
-      write (fname, '(A,I0,A)') '../preprocessing/inv/output.', OBJglobRefi%n_iterative_refi, '.femtic.vtk'
+      inquire (file='computing/mesh.dat', exist=ex1)
+      inquire (file='computing/resistivity_block_iter0.dat', exist=ex2)
+      write (fname, '(A,I0,A)') 'computing/output.', OBJglobRefi%n_iterative_refi, '.femtic.vtk'
       inquire (file=fname, exist=ex3)
 
       if (ex1 .and. ex2 .and. ex3) then
-         write (*, *) 'Input files for running Femtic are successfully copied to preprocessing/inv'
+         write (*, *) 'Input files for running Femtic are successfully copied to computing/'
       else
          write (*, *) 'ERROR: Missing files after copy.'
          write (*, *) 'mesh.dat exists? ', ex1
