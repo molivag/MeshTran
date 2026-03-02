@@ -2,6 +2,8 @@ preprocessing/
 buildMesh/
 _buildMesh1/
 _buildMesh2/
+_preprocessing/
+computing/
 input_data/
 last_builMesh/
 

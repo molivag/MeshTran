@@ -22,7 +22,6 @@ module mesh_config
       real(dp) :: yminDOM, ymaxDOM
       real(dp) :: zminDOM, zmaxDOM
       real(dp) :: pad_x, pad_y
-      real(dp) :: rotation
 
 
    end type MeshSettings
