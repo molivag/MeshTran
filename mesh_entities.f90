@@ -22,8 +22,15 @@ module mesh_entities
 
    type :: ParamRefinement
       integer :: Nsph = 0
-      real(dp), allocatable :: edges(:)
-      real(dp), allocatable :: radius(:)
+      integer :: Nelipses = 0
+      real(dp) :: rotation
+      real(dp) :: minEDGE
+      real(dp) :: minRAD
+      real(dp) :: maxRAD
+      real(dp) :: paddingRefi
+      real(dp) :: sizeBoundary
+      real(dp) :: coreResol
+      real(dp) :: growthFactor
    end type ParamRefinement
 
    type :: ModelRegion
