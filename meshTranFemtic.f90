@@ -78,12 +78,13 @@ program femtic_mesh_driver
    call write_topography(settings, dem_x_km, dem_y_km, dem_z, n_dem)
    call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z, n_dem)
    call write_coast_line(settings)
-   call write_observing_sites(site_x_km, site_y_km, n_edi_files,paramRefi)
+   call write_observing_sites(site_x_km, site_y_km, n_edi_files, paramRefi)
    call control_mesh(x0, y0, site_x_km, site_y_km, n_edi_files, settings, paramRefi)
-   stop
 
-   call setGlobalMeshRefinement(0.0d0, 0.0d0, 10, site_x_km, site_y_km, n_edi_files, globRefi)
-   call resistivitty_attribute(n_sites, site_x_km, site_y_km, fix_elev_site, regions)
+   call write_makeMtr_param(0.0d0, 0.0d0, site_x_km, site_y_km, n_edi_files, paramRefi, globRefi)
+   call write_obs_sites(site_x_km, site_y_km, fix_elev_site, n_edi_files, paramRefi)
+
+   call resistivitty_attribute(n_sites, site_x_km, site_y_km, fix_elev_site, settings, globRefi, regions)
 
    call run_makeTetraMesh_and_assign_regions(regions)
    call run_TETGEN_and_refine_mesh(globRefi)
@@ -164,29 +165,35 @@ contains
          case ('PAD_Y')
             read (val, *) OBJsettings%pad_y
 
-         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
-         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
-         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+            ! = = = = surface refinement for sites and control  = = = = = = =
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
          case ('NUM_ELIPSES')
             read (val, *) OBJparamRefi%Nelipses
 
          case ('NUM_ESFERAS')
             read (val, *) OBJparamRefi%Nsph
+            print *, 'Desde Reading'
+            print *, OBJparamRefi%Nsph
 
          case ('ROTATION')
             read (val, *) OBJparamRefi%rotation
 
-         case ('minRADIOS')
+         case ('minRADIO')
             read (val, *) OBJparamRefi%minRAD
 
-         case ('maxRADIOS')
+            print *, 'Desde Reading min'
+            print *, OBJparamRefi%minRAD
+         case ('maxRADIO')
             read (val, *) OBJparamRefi%maxRAD
 
-         case ('EDGES')
+            print *, 'Desde Reading'
+            print *, OBJparamRefi%maxRAD
+         case ('minEDGES')
             read (val, *) OBJparamRefi%minEDGE
 
-         ! = = = = = = = = = = = = = = = = = = = = = = = =   
-         ! = = = = = = = = = = = = = = = = = = = = = = = =   
+            ! = = = = = = = = = = = = = = = = = = = = = = = =
+            ! = = = = = = = = = = = = = = = = = = = = = = = =
          case ('SITEpadding')
             read (val, *) OBJparamRefi%paddingRefi
 
@@ -198,34 +205,52 @@ contains
 
          case ('GROWTH')
             read (val, *) OBJparamRefi%growthFactor
-            
-         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
-         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
-         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
 
-            !## => Refinement for mesh parameter based on spheres
-         case ('PARAM_ESFER')
-            read (val, *) OBJmodReg%NparamEsfer
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+            ! = = = = Refinement for sites at the volumetric mesh = = = = = =
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+         case ('REFI_ELLIPSES')
+            read (val, *) OBJglobRefi%levels
 
-            if (allocated(OBJmodReg%radiusForEsfer)) deallocate (OBJmodReg%radiusForEsfer)
-            if (allocated(OBJmodReg%edgesForEsfer)) deallocate (OBJmodReg%edgesForEsfer)
-            allocate (OBJmodReg%radiusForEsfer(OBJmodReg%NparamEsfer))
-            allocate (OBJmodReg%edgesForEsfer(OBJmodReg%NparamEsfer))
+         case ('HIGH_RESOL_LAYER')
+            read (val, *) OBJglobRefi%depth_min_factor
 
-         case ('PARAM_RADIOS')
-            if (.not. allocated(OBJmodReg%radiusForEsfer)) then
-               write (*, *) 'ERROR: EDGES defined before paramESFERAS'
-               stop
-            end if
-            read (val, *) OBJmodReg%radiusForEsfer
-         case ('PARAM_EDGES')
-            if (.not. allocated(OBJmodReg%edgesForEsfer)) then
-               write (*, *) 'ERROR: EDGES defined before paramESFERAS'
-               stop
-            end if
-            read (val, *) OBJmodReg%edgesForEsfer
+         case ('NEAR_FIELD_RESOL')
+            read (val, *) OBJglobRefi%core_resolution
 
-            !## => Regions Atributes in the model
+         case ('FAR_FIELD_RESOL')
+            read (val, *) OBJglobRefi%farfield_resolution
+
+         case ('FRAC_SKIN_DEPTH')
+            read (val, *) OBJglobRefi%frac_skin_depth
+
+         case ('ITER_TET_REFI')
+            read (val, *) OBJglobRefi%n_iterative_refi
+
+         case ('BKGRD_RHO')
+            read (val, *) OBJglobRefi%background_rho
+
+         case ('H_PADDING')
+            read (val, *) OBJglobRefi%horizontal_padding
+
+         case ('F_MIN_HZ')
+            read (val, *) OBJglobRefi%fmin_hz
+
+         case ('SITE_ELLIPSES')
+            read (val, *) OBJglobRefi%n_ellipses_site
+
+         case ('TARGET_DEPTH')
+            read (val, *) OBJglobRefi%target_depth
+
+         case ('V_PADDING')
+            read (val, *) OBJglobRefi%vertical_padding_factor
+
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+            ! = = = = Refinement for mesh parameter based on spheres  = = = =
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+         case ('ELLIPSES')
+            read (val, *) OBJmodReg%NpEllipses
+
          case ('REGIONS')
             read (val, *) OBJmodReg%Nregions
 
@@ -275,24 +300,31 @@ contains
             read (val, *) OBJmodReg%isRHOfix
             print *, 'FIX_RESISTIVITY', OBJmodReg%isRHOfix
 
-            !## => Refinement for sites at the volumetric mesh
-         case ('SITE_ELLIPSES')
-            read (val, *) OBJglobRefi%n_ellipses_site
+         case ('PARAM_ESFER')
+            read (val, *) OBJmodReg%NparamEsfer
 
-            if (allocated(OBJglobRefi%maxSiteEdge)) deallocate (OBJglobRefi%maxSiteEdge)
-            if (allocated(OBJglobRefi%lenEllipseSite)) deallocate (OBJglobRefi%lenEllipseSite)
-            allocate (OBJglobRefi%maxSiteEdge(OBJglobRefi%n_ellipses_site))
-            ALLOCATE (OBJglobRefi%lenEllipseSite(OBJglobRefi%n_ellipses_site))
+            if (allocated(OBJmodReg%radiusForEsfer)) deallocate (OBJmodReg%radiusForEsfer)
+            if (allocated(OBJmodReg%edgesForEsfer)) deallocate (OBJmodReg%edgesForEsfer)
+            allocate (OBJmodReg%radiusForEsfer(OBJmodReg%NparamEsfer))
+            allocate (OBJmodReg%edgesForEsfer(OBJmodReg%NparamEsfer))
 
-         case ('MAX_EDGE_LEN')
-            read (val, *) OBJglobRefi%maxSiteEdge
+         case ('PARAM_RADIOS')
+            if (.not. allocated(OBJmodReg%radiusForEsfer)) then
+               write (*, *) 'ERROR: EDGES defined before paramESFERAS'
+               stop
+            end if
+            read (val, *) OBJmodReg%radiusForEsfer
+         case ('PARAM_EDGES')
+            if (.not. allocated(OBJmodReg%edgesForEsfer)) then
+               write (*, *) 'ERROR: EDGES defined before paramESFERAS'
+               stop
+            end if
+            read (val, *) OBJmodReg%edgesForEsfer
 
-         case ('LEN_ELLIPSE')
-            read (val, *) OBJglobRefi%lenEllipseSite
+            !## => Regions Atributes in the model
 
-            !## => Iterative tetgen refinement
-         case ('TET_REFINEMENT'); read (val, *) OBJglobRefi%n_iterative_refi
-
+         case ('ELIPSES')
+            read (val, *) OBJmodReg%NpEllipses
          end select
 
       end do
@@ -349,7 +381,7 @@ contains
       write (iu, '(ES0.4)') 1.0d-6
 
       write (iu, 101) 'ALTITUDE'
-      write (iu,  101)OBJsettings%topography_file
+      write (iu, 101) OBJsettings%topography_file
       write (iu, '(F5.3)') 0.0d0
       write (iu, '(ES0.4)') 1.0d10
 
@@ -364,7 +396,7 @@ contains
       ! Cerrar archivo
       !-----------------------------------------
       close (iu)
-      101 format(A)
+101   format(A)
 
    end subroutine control_mesh
 !=========================================================
@@ -391,10 +423,10 @@ contains
       ! 1) Calcular radio máximo desde el centro a las estaciones
       ! ----------------------------------------------------------
 
-      print*, 'esto es siteX y siteY antes del loop'
-      do ki=1,4
+      print *, 'esto es siteX y siteY antes del loop'
+      do ki = 1, 4
          print'(2f15.5)', sitex(ki), sitey(ki)
-      enddo
+      end do
       max_r = 0.0d0
       do ki = 1, n_sites
          dist = sqrt((sitex(ki))**2 + (sitey(ki))**2)
@@ -408,27 +440,27 @@ contains
 
       ! Radio del core (zona survey + padding)
 
-      print'(A,2f15.5)', 'esto es x0 y y0', x0,y0
-      print*, ' ' 
-      print'(A,2f15.5)', 'esto es x_0 y y_0', x_0,y_0
+      print'(A,2f15.5)', 'esto es x0 y y0', x0, y0
+      print *, ' '
+      print'(A,2f15.5)', 'esto es x_0 y y_0', x_0, y_0
       print'(A,f15.5)', 'esto es max_r', max_r
       a1 = max_r + OBJrefiParam%paddingRefi
 
       ! Radio del dominio (distancia máxima desde centro al borde)
-      domain_r = max(abs(OBJsettings%xminDOM - x_0), abs( OBJsettings%xmaxDOM - x_0), &
+      domain_r = max(abs(OBJsettings%xminDOM - x_0), abs(OBJsettings%xmaxDOM - x_0), &
                      abs(OBJsettings%yminDOM - y_0), abs(OBJsettings%ymaxDOM - y_0))
 
-      print*, ' ' 
-      print*, ' ' 
+      print *, ' '
+      print *, ' '
       print'(A,f15.5)', 'esto es xmin', OBJsettings%xminDOM
       print'(A,f15.5)', 'esto es xmax', OBJsettings%xmaxDOM
       print'(A,f15.5)', 'esto es ymin', OBJsettings%yminDOM
       print'(A,f15.5)', 'esto es ymax', OBJsettings%ymaxDOM
-      print*, ' ' 
-      print*, ' ' 
-      print*, ' ' 
+      print *, ' '
+      print *, ' '
+      print *, ' '
       print'(A,f15.5)', 'esto es a1', a1
-      print*, ' '
+      print *, ' '
       a_last = domain_r
       print'(A,f15.5)', ' a_last', domain_r
 
@@ -442,7 +474,7 @@ contains
       ! ----------------------------------------------------------
       ! 3) Inicializar tamaño de elemento (len)
       ! ----------------------------------------------------------
-      current_len = OBJrefiParam%coreResol 
+      current_len = OBJrefiParam%coreResol
 
       ! ----------------------------------------------------------
       ! 4) Generar elipsoides jerárquicos
@@ -456,7 +488,7 @@ contains
       fvp_final = 0.0d0
       fvm_final = 0.0d0
 
-      write(unit, '(I0)') OBJrefiParam%Nelipses
+      write (unit, '(I0)') OBJrefiParam%Nelipses
       a_ratio = 1.3
       do ki = 1, OBJrefiParam%Nelipses
          t = real(ki - 1, dp)/real(OBJrefiParam%Nelipses - 1, dp)
@@ -943,32 +975,32 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine snap_sites_to_dem(ediID, site_x, site_y, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
+   subroutine snap_sites_to_dem(ediID, siteX, siteY, Nsites, DEMcorX, DEMcorY, DEMcorZ, NDEM, siteZ)
 
       use mesh_config
       implicit none
-      integer, intent(in):: n_sites, n_dem
-      real(8), intent(in):: site_x(n_sites), site_y(n_sites)
-      real(8), intent(in):: dem_x(n_dem), dem_y(n_dem), dem_z(n_dem)
-      real(8), intent(out):: fix_elev_site(n_sites)
-      character(len=*) :: ediID(n_sites)
+      integer, intent(in):: Nsites, NDEM
+      real(8), intent(in):: siteX(Nsites), siteY(Nsites)
+      real(8), intent(in):: DEMcorX(NDEM), DEMcorY(NDEM), DEMcorZ(NDEM)
+      real(8), intent(out):: siteZ(Nsites)
+      character(len=*) :: ediID(Nsites)
 
       character(len=512):: fname
-      integer:: i, j, jmin, iu
+      integer:: ii, j, jmin, iu
       real(8):: dx, dy, d2, d2min
       real(8):: zmin
 
       ! Protección mínima: elevación mínima del DEM
-      zmin = minval(dem_z)
+      zmin = minval(DEMcorZ)
       if (zmin < 1.0d0) zmin = 1.0d0   ! nunca 0 ni negativa
 
-      do i = 1, n_sites
+      do ii = 1, Nsites
          d2min = huge(1.0d0)
          jmin = 1
 
-         do j = 1, n_dem
-            dx = dem_x(j) - site_x(i)
-            dy = dem_y(j) - site_y(i)
+         do j = 1, NDEM
+            dx = DEMcorX(j) - siteX(ii)
+            dy = DEMcorY(j) - siteY(ii)
             d2 = dx*dx + dy*dy
 
             if (d2 < d2min) then
@@ -977,18 +1009,21 @@ contains
             end if
          end do
 
-         fix_elev_site(i) = dem_z(jmin)
+         siteZ(ii) = DEMcorZ(jmin)
 
          ! seguridad extra
-         if (fix_elev_site(i) < zmin) fix_elev_site(i) = zmin
+         if (siteZ(ii) < zmin) siteZ(ii) = zmin
       end do
 
+      ! if (OBJsetting%dem_units == 'kilometer') then
+      siteZ = siteZ/1000.0d0
+      ! end if
       ! Writing final coordinate site files
       print *, trim(outdir)
       fname = trim(outdir)//'sites_coord_elev.dat'
       open (newunit=iu, file=fname, status='replace', action='write')
-      do i = 1, n_sites
-         write (iu, '(A12, 3f15.5)') ediID(i), site_x(i), site_y(i), fix_elev_site(i)/1000.0d0
+      do ii = 1, Nsites
+         write (iu, '(A12, 3f15.5)') ediID(ii), siteX(ii), siteY(ii), siteZ(ii)
       end do
 
       close (iu)
@@ -1221,10 +1256,8 @@ contains
       ! -----------------------------
       call execute_command_line('echo " "')
       call execute_command_line('echo "--Running makeTetraMesh..."')
-      !    execute_command_line('cd buildMesh && cp ../input_data/geometry/* .', &
 
-      call execute_command_line('cd preprocessing/buildMesh && cp ../geometry/* .', &
-                                wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && cp ../geometry/* .', wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: copying geometry failed'
       call execute_command_line('echo " "')
 
@@ -1309,7 +1342,7 @@ contains
             write (iu_out, '(I0)') OBJmodRegions%Nregions
 
             do k = 1, OBJmodRegions%Nregions
-               write (iu_out, '(I3,3F10.3,I4,1PE12.4)') k, OBJmodRegions%coord(:, k), OBJmodRegions%ID(k), 1.0e9
+               write (iu_out, '(I3,3F10.3,I4,1PE12.4)') k, OBJmodRegions%coord(:, k), OBJmodRegions%ID(k), OBJmodRegions%rho(k)
             end do
          end if
 
@@ -1333,89 +1366,539 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine setGlobalMeshRefinement(xcenter, ycenter, Nglob_ellipses, corXsite, corYsite, nSites, OBJglobRefi)
+   pure real(dp) function skin_depth_km(rho_ohmm, f_hz) result(delta)
+      real(dp), intent(in) :: rho_ohmm, f_hz
 
-      implicit none
-      type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
-      integer, intent(in)   :: Nglob_ellipses
-      real(dp), intent(in)  :: ycenter, xcenter!, rot_glob
-      character(len=512)    :: fname
-      real(dp)              :: z0, oblatness_on_ZXplane
-      integer               :: iu, i, nSites, k
-      ! Parámetros hardcodeados (pueden ser arreglos en el futuro)
-      real(dp) :: a(Nglob_ellipses), lengths(Nglob_ellipses), fh(Nglob_ellipses), fvp(Nglob_ellipses), fvm(Nglob_ellipses)
-      ! real(dp), intent(in) :: len_alon_x_axis(n_site_ellipses), max_edge_len_within_ellipse(n_site_ellipses)
-      real(dp), intent(in) :: corXsite(nSites), corYsite(nSites)
+      ! Aproximación común: δ[km] ≈ 500 * sqrt(rho/f)
+      if (rho_ohmm <= 0.0_dp .or. f_hz <= 0.0_dp) then
+         delta = 0.0_dp
+      else
+         delta = 500.0_dp*sqrt(rho_ohmm/f_hz)
+         delta = delta/1000.0d0
+      end if
 
-      z0 = 0.0d0
-
-      ! Datos del ejemplo del autor
-      a = (/40.0, 45.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0/)
-      lengths = (/1.0, 1.5, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0, 30.0, 45.0/)
-      fh = (/0.5, 0.5, 0.5, 0.3, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0/)
-      fvp = (/0.7, 0.5, 0.4, 0.3, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0/)
-      fvm = (/0.9, 0.7, 0.7, 0.5, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0/)
-
-      a = a*1.0d0
-
-      fname = trim(outdir)//'makeMtr.param'
-      open (newunit=iu, file=fname, status='replace', action='write')
-
-      ! 1. Coordenadas del centro (Y, X, Z)
-      write (iu, '(3F12.5)') xcenter, ycenter, z0
-
-      ! 2. Ángulo de rotación
-      write (iu, '(F12.2)') OBJglobRefi%rotation
-
-      ! 3. Número de elipsoides
-      ! write (iu, '(I5)') Nglob_ellipses
-      write (iu, '(I5)') OBJglobRefi%n_ellipses_site
-
-      ! 4. Bloque de elipsoides
-      do i = 1, min(10, 10)
-         write (iu, '(F6.1, F6.1, 1x, 3F6.2)') a(i), lengths(i), fh(i), fvp(i), fvm(i)
-      end do
-
-      close (iu)
-      print *, 'Archivo makeMtr.param creado exitosamente en ', trim(outdir)
-
-      oblatness_on_ZXplane = 0.3
-
-      fname = trim(outdir)//'/obs_site.dat'
-      open (newunit=iu, file=fname, status='replace', action='write', form='formatted')
-
-      ! ======================
-      ! Write number of sites
-      ! ======================
-      write (iu, '(I4)') nSites
-
-      ! ======================
-      ! Write each observation site
-      ! ======================
-      do i = 1, nSites
-         ! X  Y  z0
-         write (iu, '(3F15.6 )') corXsite(i), corYsite(i), z0
-         write (iu, '(I1)') OBJglobRefi%n_ellipses_site
-
-         ! (Ri, Li) pairs
-         do k = 1, OBJglobRefi%n_ellipses_site
-            write (iu, '(3F5.2 )') &
-               OBJglobRefi%lenEllipseSite(k), OBJglobRefi%maxSiteEdge(k), oblatness_on_zxplane
-         end do
-      end do
-
-      close (iu)
-      print *, 'Archivo obs_site.dat creado exitosamente en ', trim(outdir)
-
-   end subroutine setGlobalMeshRefinement
+   end function skin_depth_km
 !=========================================================
 !=======
 !=========================================================
-   subroutine resistivitty_attribute(Nsites, coorXsite, coorYsite, coorZsite, OBJmodReg)
+   subroutine write_makeMtr_param(xcenter, ycenter, site_x, site_y, Nsites, OBJrefiParam, cfg)
+
+      implicit none
+
+      type(GlobalRefinement), intent(in)  :: cfg
+      type(ParamRefinement), INTENT(IN)   :: OBJrefiParam
+      integer, intent(in)                 :: Nsites
+      real(dp), intent(in)                :: xcenter, ycenter
+      real(dp), intent(in)                :: site_x(Nsites), site_y(Nsites)
+
+      integer :: iu, i, ios
+      real(dp) :: z0
+      real(dp) :: dist, max_r
+      real(dp) :: a1, ai
+      real(dp) :: max_elem_size
+      real(dp) :: depth_min, depth_last, depth_ratio, depth_i
+      real(dp) :: len1, len_i, t
+      real(dp) :: fh, fvp, fvm, fvm_core, relax, fh_final, fvp_final, depth_ratio_core, depth_ratio_trans
+      real(dp) :: relax_factor, z_core, z_relax_end, n_core, n_trans
+      integer :: n_core_i, n_trans_i
+      real(dp) :: a_core_end, a_last, a_ratio_core, a_ratio_far, step
+      real(dp) :: len_mult(5)
+      real(dp) :: fh_tab(5), fvp_tab(5), fvm_tab(5)
+      character(len=512) :: fname
+
+      z0 = 0.0_dp
+      
+
+
+
+      if (cfg%levels < 2) stop "ERROR: mesh.volume.levels debe ser >= 2"
+
+      ! ----------------------------------------------------------
+      ! 1) distancia maxima de un site al centro del dominio
+      ! ----------------------------------------------------------
+      max_r = -1.0_dp
+      do i = 1, Nsites
+         dist = sqrt(site_x(i)**2 + site_y(i)**2)
+         if (dist > max_r) max_r = dist
+      end do
+
+      ! ----------------------------------------------------------
+      ! 2) a1 (radio core horizontal)
+      ! ----------------------------------------------------------
+      print'(A,f15.5)', 'Esto es max_r', max_r
+      a1 = max_r + cfg%horizontal_padding
+
+      ! Evitar geometría imposible: necesitamos ai > depth_i
+      ! (más adelante ajustamos ai si hiciera falta, pero a1 debe ser razonable)
+      a1 = max(a1, 1.2_dp*(0.3_dp*cfg%target_depth))  ! usando depth_min interno
+      print*, ' '
+      print'(A,f15.5)', 'Esto es a1', a1
+      print*, ' '
+
+      ! ----------------------------------------------------------
+      ! 3) cap físico para len (por input file)
+      ! ----------------------------------------------------------
+      max_elem_size = cfg%farfield_resolution
+
+      ! 4) PROFUNDIDADES POR NIVEL (V1 SIMPLE, INTERNO)
+
+      ! ----------------------------------------------------------
+      ! 4) cap físico para len (por input file)
+      ! ----------------------------------------------------------
+      relax_factor = 2.0_dp   ! transición hasta 2*z_core (puedes ajustar interno)
+
+      ! --- 4.1) Profundidad core controlada por HRL
+      depth_min = cfg%depth_min_factor*cfg%target_depth   ! mínimo interno (km)
+      z_core = max(0.5_dp, depth_min)
+
+      ! --- 4.2) Extensión total del dominio
+      depth_last = cfg%vertical_padding_factor*cfg%target_depth
+
+      ! --- 4.3) Fin de transición vertical
+      ! z_relax_end = depth_last
+      z_relax_end = min(depth_last, max(relax_factor*z_core, 0.7*depth_last))
+
+      ! --- 4.4) Reparto de niveles
+      n_core = real(cfg%levels/2, dp)          ! mitad niveles core
+      n_trans = real(cfg%levels - n_core, dp)   ! mitad transición
+
+      if (n_core < 1.0_dp) n_core = 1.0_dp
+      if (n_trans < 1.0_dp) n_trans = 1.0_dp
+
+      ! --- 5) Ratios geométricos independientes
+      depth_ratio_core = (z_core/0.5_dp)**(1.0_dp/max(n_core - 1.0_dp, 1.0_dp))
+      depth_ratio_trans = (depth_last/z_core)**(1.0_dp/max(n_trans, 1.0_dp))
+
+      ! ----------------------------------------------------------
+      ! 6) fh/fvp: relajación lineal a 0
+      ! ----------------------------------------------------------
+      fh_final = 0.0_dp
+      fvp_final = 0.0_dp
+
+      ! --- Core: 5 niveles como el autor (o menos si levels es chico)
+      n_core_i = min(5, cfg%levels - 2)   ! deja al menos 2 niveles para trans+far
+      if (n_core_i < 1) n_core_i = 1
+
+      ! --- Transición: 1 nivel (simple y efectivo)
+      n_trans_i = 1
+      if (cfg%levels - n_core_i <= 1) n_trans_i = 0   ! si no hay espacio
+
+      ! Tablas tipo autor (se recortan si n_core_i < 5)
+      len_mult = (/0.35_dp, 1.15_dp, 1.8_dp, 3.0_dp, 5.0_dp/)
+
+      ! fh_tab = (/0.5_dp, 0.5_dp, 0.5_dp, 0.3_dp, 0.2_dp/)    !----> refinamiento algo estrecho en y, y cargado en hacia direccion x 
+      fh_tab = (/0.3_dp, 0.2_dp, 0.1_dp, 0.05_dp, 0.0_dp/)      !----> caso de refinamiento casi circular en xy plane
+      ! fh_tab = (/0.8_dp, 0.7_dp, 0.5_dp, 0.5_dp, 0.4_dp/)      !----> caso de refinamiento estecho en y y marcado en x
+
+      !tierra
+      fvp_tab = (/0.3_dp, 0.3_dp, 0.2_dp, 0.1_dp, 0.1_dp/)
+      
+      !aire
+      fvm_tab = (/0.7_dp, 0.6_dp, 0.5_dp, 0.4_dp, 0.3_dp/)
+
+      ! Core A suave: usa ratio fijo suave (parecido al autor)
+      a_ratio_core = 1.15_dp   ! puedes dejarlo fijo interno por ahora
+
+      ! Donde termina el core en radio:
+      a_core_end = a1*a_ratio_core**real(n_core_i - 1, dp)
+
+      ! A_last: el último radio del archivo (aquí sí usa tu crecimiento global)
+      a_last = a1*cfg%a_ratio**real(cfg%levels - 1, dp)
+
+      ! Asegura estrictamente creciente (muy importante)
+      if (a_last <= a_core_end) a_last = 1.05_dp*a_core_end
+
+      ! Ratio farfield para llegar a a_last con los niveles restantes
+      if (cfg%levels > n_core_i + n_trans_i) then
+         a_ratio_far = (a_last/a_core_end)**(1.0_dp/real(cfg%levels - (n_core_i + n_trans_i), dp))
+      else
+         a_ratio_far = 1.0_dp
+      end if
+
+      ! ----------------------------------------------------------
+      ! 7) Escribir makeMtr.param
+      ! ----------------------------------------------------------
+      fname = trim(outdir)//'/makeMtr.param'
+      open (newunit=iu, file=fname, status='replace', action='write', iostat=ios)
+      if (ios /= 0) stop "ERROR: no se pudo abrir makeMtr.param"
+
+      write (iu, '(3(F4.2,1x))') xcenter, ycenter, z0
+      write (iu, '(F4.2)') OBJrefiParam%rotation
+      write (iu, '(I0)') cfg%levels
+
+
+      do i = 1, cfg%levels
+
+         if (i <= n_core_i) then
+            ! -------- CORE (patrón autor) --------
+            ai = a1*a_ratio_core**real(i - 1, dp)
+
+            ! growth = cfg%vol_len_factor * len_mult(i)
+            ! len_i = min(cfg%core_resolution*growth, max_elem_size)
+
+            len_i = min(cfg%core_resolution*len_mult(i), max_elem_size)
+            
+
+            fh = fh_tab(i)
+            fvp = fvp_tab(i)
+            fvm = fvm_tab(i)
+
+         else if (i <= n_core_i + n_trans_i) then
+            ! -------- TRANSICIÓN (apaga anisotropía) --------
+            ! ai = a_core_end * a_ratio_far   ! primer paso fuera del core (simple)
+            step = i - n_core_i
+            ai = a_core_end*a_ratio_far**step
+
+            ! aquí puedes escoger: o un len intermedio, o ya dejar que crezca
+            len_i = min(max(len_i, cfg%core_resolution*10.0_dp), max_elem_size)
+
+            !    fh = (1.0_dp - t)*cfg%fh_core_vol + t*fh_final
+            !    fh = max(0.0_dp, min(fh, 0.99_dp))
+            fh = 0.0_dp
+            fvp = 0.0_dp
+            fvm = 0.0_dp
+
+         else
+            ! -------- FARFIELD (todo 0) --------
+            ai = a_core_end*a_ratio_far**real(i - (n_core_i + n_trans_i) + 1.25, dp)
+
+            ! crecimiento suave de len hasta cap
+            len_i = min(len_i*cfg%len_growth, max_elem_size)
+
+            !    fh = (1.0_dp - t)*cfg%fh_core_vol + t*fh_final
+            !    fh = max(0.0_dp, min(fh, 0.99_dp))
+            fh = 0.0_dp
+            fvp = 0.0_dp
+            fvm = 0.0_dp
+         end if
+
+         ! clamp seguridad
+         fh = max(0.0_dp, min(fh, 0.99_dp))
+         fvp = max(0.0_dp, min(fvp, 0.99_dp))
+         fvm = max(0.0_dp, min(fvm, 0.99_dp))
+
+         write (iu, 10) ai, len_i, fh, fvp, fvm
+      end do
+
+      close (iu)
+10    format(F8.2, 2X, F6.2, 2X, F5.3, 1X, F6.3, 1X, F6.3)
+
+   end subroutine write_makeMtr_param
+!=========================================================
+!=======
+!=========================================================
+   subroutine write_obs_sites(site_coorX, site_coorY, site_coorZ, nSites, OBJparamRefi)
+
+      implicit none
+      integer, intent(in) :: nSites
+      real(dp), intent(in) :: site_coorX(nSites), site_coorY(nSites), site_coorZ(nSites)
+      type(ParamRefinement), intent(in) :: OBJparamRefi
+
+      integer :: iu, ij, k
+      real(dp) :: r_ratio, e_ratio
+      real(dp) :: r_k, L_k
+      real(dp) :: t, obl_k, oblateness_core
+
+      character(len=512) :: fname
+
+      oblateness_core = 0.3_dp
+
+      fname = trim(outdir)//'/obs_site.dat'
+      open (newunit=iu, file=fname, status='replace', action='write')
+
+      write (iu, '(I0)') nSites
+
+      print *, ' Prints en obs_site'
+      ! ---- Growth ratios ----
+      if (OBJparamRefi%Nsph > 1) then
+         print *, OBJparamRefi%maxRAD
+         r_ratio = (OBJparamRefi%maxRAD/OBJparamRefi%minRAD)** &
+                   (1.0_dp/real(OBJparamRefi%Nsph - 1, dp))
+
+         e_ratio = (OBJparamRefi%coreResol/OBJparamRefi%minEDGE)** &
+                   (1.0_dp/real(OBJparamRefi%Nsph - 1, dp))
+         print *, 'entra al if'
+
+         print'(A,f15.5)', 'esto es r_ratio en if', r_ratio
+         print'(A,f15.5)', 'esto es e_ratio en if', e_ratio
+      else
+         r_ratio = 1.0_dp
+         e_ratio = 1.0_dp
+      end if
+      print *, r_ratio
+      print *, e_ratio
+
+      do ij = 1, nSites
+
+         write (iu, '(3(F14.9,1x))') site_coorX(ij), site_coorY(ij), site_coorZ(ij)
+         write (iu, '(I0)') OBJparamRefi%Nsph
+
+         r_k = OBJparamRefi%minRAD
+         L_k = OBJparamRefi%minEDGE
+
+         do k = 1, OBJparamRefi%Nsph
+
+            t = real(k - 1, dp)/real(OBJparamRefi%Nsph - 1, dp)
+
+            obl_k = (1.0_dp - t)*oblateness_core
+            obl_k = max(0.0_dp, min(obl_k, 0.99_dp))
+
+            write (iu, '(3(F5.2,1x))') r_k, L_k, obl_k
+
+            r_k = r_k*r_ratio
+            L_k = L_k*e_ratio
+
+         end do
+
+      end do
+
+      close (iu)
+
+   end subroutine
+
+   ! subroutine setGlobalMeshRefinement(xcenter, ycenter, Nglob_ellipses, corXsite, corYsite, nSites, OBJglobRefi)
+   !
+   !    implicit none
+   !    type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
+   !    integer, intent(in)   :: Nglob_ellipses
+   !    real(dp), intent(in)  :: ycenter, xcenter!, rot_glob
+   !    character(len=512)    :: fname
+   !    real(dp)              :: z0, oblatness_on_ZXplane
+   !    integer               :: iu, i, nSites, k
+   !    ! Parámetros hardcodeados (pueden ser arreglos en el futuro)
+   !    real(dp) :: a(Nglob_ellipses), lengths(Nglob_ellipses), fh(Nglob_ellipses), fvp(Nglob_ellipses), fvm(Nglob_ellipses)
+   !    ! real(dp), intent(in) :: len_alon_x_axis(n_site_ellipses), max_edge_len_within_ellipse(n_site_ellipses)
+   !    real(dp), intent(in) :: corXsite(nSites), corYsite(nSites)
+   !
+   !    z0 = 0.0d0
+   !
+   !    ! Datos del ejemplo del autor
+   !    a = (/40.0, 45.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0/)
+   !    lengths = (/1.0, 1.5, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0, 30.0, 45.0/)
+   !    fh = (/0.5, 0.5, 0.5, 0.3, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0/)
+   !    fvp = (/0.7, 0.5, 0.4, 0.3, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0/)
+   !    fvm = (/0.9, 0.7, 0.7, 0.5, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0/)
+   !
+   !    a = a*1.0d0
+   !
+   !    fname = trim(outdir)//'makeMtr.param'
+   !    open (newunit=iu, file=fname, status='replace', action='write')
+   !
+   !    ! 1. Coordenadas del centro (Y, X, Z)
+   !    write (iu, '(3F12.5)') xcenter, ycenter, z0
+   !
+   !    ! 2. Ángulo de rotación
+   !    write (iu, '(F12.2)') OBJglobRefi%rotation
+   !
+   !    ! 3. Número de elipsoides
+   !    ! write (iu, '(I5)') Nglob_ellipses
+   !    write (iu, '(I5)') OBJglobRefi%n_ellipses_site
+   !
+   !    ! 4. Bloque de elipsoides
+   !    do i = 1, min(10, 10)
+   !       write (iu, '(F6.1, F6.1, 1x, 3F6.2)') a(i), lengths(i), fh(i), fvp(i), fvm(i)
+   !    end do
+   !
+   !    close (iu)
+   !    print *, 'Archivo makeMtr.param creado exitosamente en ', trim(outdir)
+   !
+   !    oblatness_on_ZXplane = 0.3
+   !
+   !    fname = trim(outdir)//'/obs_site.dat'
+   !    open (newunit=iu, file=fname, status='replace', action='write', form='formatted')
+   !
+   !    ! ======================
+   !    ! Write number of sites
+   !    ! ======================
+   !    write (iu, '(I4)') nSites
+   !
+   !    ! ======================
+   !    ! Write each observation site
+   !    ! ======================
+   !    do i = 1, nSites
+   !       ! X  Y  z0
+   !       write (iu, '(3F15.6 )') corXsite(i), corYsite(i), z0
+   !       write (iu, '(I1)') OBJglobRefi%n_ellipses_site
+   !
+   !       ! (Ri, Li) pairs
+   !       do k = 1, OBJglobRefi%n_ellipses_site
+   !          write (iu, '(3F5.2 )') &
+   !             OBJglobRefi%lenEllipseSite(k), OBJglobRefi%maxSiteEdge(k), oblatness_on_zxplane
+   !       end do
+   !    end do
+   !
+   !    close (iu)
+   !    print *, 'Archivo obs_site.dat creado exitosamente en ', trim(outdir)
+   !
+   ! end subroutine setGlobalMeshRefinement
+!=========================================================
+!=======
+!=========================================================
+   subroutine PARAM_ELLIPSOIDS(Nsites, siteX, siteY, OBJsettings, obj_modReg, OBJglobRefi, A, LEN, FH, FV)
+      ! target_depth_km, fmin_hz, rho_ref,
+      ! Ne, A, LEN, FH, FV)
+
+      implicit none
+
+      type(MeshSettings), INTENT(IN) :: OBJsettings
+      type(ModelRegion), intent(in) :: obj_modreg
+      type(GlobalRefinement), INTENT(IN) :: OBJglobRefi
+      integer, intent(in) :: Nsites
+      real(dp), intent(in) :: siteX(Nsites), siteY(Nsites)
+      real(dp), allocatable, intent(out) :: A(:), LEN(:), FH(:), FV(:)
+
+      ! --------------------------
+      ! Local variables
+      ! --------------------------
+      integer :: k, Ne
+      real(dp) :: max_r, dist
+      real(dp) :: xmin, xmax, ymin, ymax
+      real(dp) :: domain_r, rho_ref, fmin_hz
+      real(dp) :: a1, a_last, a_ratio
+      real(dp) :: len_core_param, len_far_param
+      real(dp) :: g_param
+      real(dp) :: fh_core, fv_core
+      real(dp) :: fh_final, fv_final
+      real(dp) :: delta_max, frac_delta
+      real(dp) :: t, relax_t
+      real(dp) :: relax_factor_param
+      real(dp) :: depth_relax_start, depth_relax_end
+      real(dp) :: len_cap_phys
+      real(dp) :: depth_eff
+
+      ! --------------------------
+      ! Inicializaciones internas
+      ! --------------------------
+
+      Ne = obj_modreg%NpEllipses
+      g_param = 1.8_dp
+      fh_core = 0.4_dp
+      fv_core = 0.7_dp
+      fh_final = 0.0_dp
+      fv_final = 0.0_dp
+      frac_delta = OBJglobRefi%frac_skin_depth
+      relax_factor_param = 2.0_dp
+
+      allocate (A(Ne), LEN(Ne), FH(Ne), FV(Ne))
+
+      ! ----------------------------------------------------------
+      ! 1) Radio máximo del survey
+      ! ----------------------------------------------------------
+      max_r = 0.0_dp
+      do k = 1, Nsites
+         dist = sqrt(siteX(k)**2 + siteY(k)**2)
+         if (dist > max_r) max_r = dist
+      end do
+
+      ! ----------------------------------------------------------
+      ! 2) Radio del dominio desde LOCATION
+      ! coord(:, :) viene de LOCATION xyz xyz
+      ! ----------------------------------------------------------
+      xmin = OBJsettings%xminDOM
+      ymin = OBJsettings%xmaxDOM
+      xmax = OBJsettings%yminDOM
+      ymax = OBJsettings%ymaxDOM
+
+      domain_r = max(sqrt(xmin**2 + ymin**2), &
+                     sqrt(xmin**2 + ymax**2), &
+                     sqrt(xmax**2 + ymin**2), &
+                     sqrt(xmax**2 + ymax**2))
+
+      print'(A,f15.5)', 'Esto es a_ratio desde if', domain_r
+      ! ----------------------------------------------------------
+      ! 3) Radios elipsoidales primera y ultima topada al 95% del maxDOMAIN
+      ! ----------------------------------------------------------
+      a1 = max_r + OBJglobRefi%horizontal_padding
+      a_last = 0.95_dp*domain_r
+
+      if (a_last <= a1) a_last = 1.05_dp*a1
+
+      if (Ne > 1) then
+         a_ratio = max((a_last/a1)**(1.0_dp/real(Ne - 1, dp)), 1.35_dp)
+         print'(A,f15.5)', 'Esto es a_ratio desde if', a_ratio
+      else
+         a_ratio = 1.0_dp
+      end if
+
+      rho_ref = OBJglobRefi%background_rho
+      fmin_hz = OBJglobRefi%fmin_hz
+      ! ----------------------------------------------------------
+      ! 4) Skin depth con fmin
+      ! δ(km) ≈ 503 * sqrt(rho/f) / 1000
+      ! ----------------------------------------------------------
+      delta_max = skin_depth_km(rho_ref, fmin_hz)
+
+      print'(A,f15.5)', 'Esto es delta_max', delta_max
+      len_cap_phys = frac_delta*delta_max
+
+      print'(A,f15.5)', 'Esto es len_cap_sys', len_cap_phys
+
+      ! ----------------------------------------------------------
+      ! 5) Tamaños de parámetro
+      ! ----------------------------------------------------------
+      len_core_param = 2.0_dp
+      print'(A,f15.5)', 'Esto es domain_r', domain_r
+
+      len_far_param = min(1.00_dp*domain_r, len_cap_phys)
+      ! len_far_param  = min(len_far_param, len_cap_phys)
+      !
+      if (len_far_param < len_core_param) len_far_param = len_core_param
+
+      ! ----------------------------------------------------------
+      ! 6) Construccion de radios
+      ! ----------------------------------------------------------
+      depth_relax_start = OBJglobRefi%target_depth
+      depth_relax_end = relax_factor_param*OBJglobRefi%target_depth
+
+      do k = 1, Ne
+
+         ! Radios
+         if (k == 1) then
+            A(k) = a1
+            LEN(k) = len_core_param
+         else
+            A(k) = A(k - 1)*a_ratio
+            LEN(k) = min(LEN(k - 1)*g_param, len_far_param)
+         end if
+
+         ! Interpolación horizontal
+         if (Ne > 1) then
+            t = real(k - 1, dp)/real(Ne - 1, dp)
+         else
+            t = 0.0_dp
+         end if
+
+         FH(k) = (1.0_dp - t)*fh_core + t*fh_final
+         FH(k) = max(0.0_dp, min(FH(k), 0.99_dp))
+
+         ! Relajación vertical basada en profundidad proxy
+         depth_eff = OBJglobRefi%target_depth*sqrt(A(k)/a1)
+
+         if (depth_eff <= depth_relax_start) then
+            FV(k) = fv_core
+         else if (depth_eff >= depth_relax_end) then
+            FV(k) = 0.0_dp
+         else
+            relax_t = (depth_eff - depth_relax_start)/ &
+                      (depth_relax_end - depth_relax_start)
+            FV(k) = (1.0_dp - relax_t)*fv_core
+         end if
+
+         FV(k) = max(0.0_dp, min(FV(k), 0.99_dp))
+
+      end do
+
+   end subroutine PARAM_ELLIPSOIDS
+!=========================================================
+!=======
+!=========================================================
+   subroutine resistivitty_attribute(Nsites, coorXsite, coorYsite, coorZsite, OBJsettings, OBJglobRefi, OBJmodReg)
 
       implicit none
 
       type(ModelRegion), INTENT(IN) :: OBJmodReg
+      type(MeshSettings), INTENT(IN) :: OBJsettings
+      type(GlobalRefinement), INTENT(IN) :: OBJglobRefi
       ! ======================
       ! Inputs
       ! ======================
@@ -1428,18 +1911,15 @@ contains
       ! ======================
       ! Local variables
       ! ======================
-      integer :: iu, i, j
+      integer :: iu, i, j, Ne
       character(len=512) :: fname
 
       ! Parámetros para la Parte 2 (Elipsoides Regionales)
-      integer, parameter :: Ne = 9
-      real(8) :: a_reg(Ne), len_reg(Ne), fh_reg(Ne), fv_reg(Ne)
+      real(8), DIMENSION(:), allocatable :: a_reg, len_reg, fh_reg, fv_reg
 
-      ! Datos del ejemplo de Usui para la Parte 2
-      a_reg = (/40.0, 45.0, 50.0, 60.0, 100.0, 200.0, 300.0, 500.0, 1000.0/)
-      len_reg = (/2.0, 3.0, 5.0, 10.0, 100.0, 200.0, 300.0, 500.0, 1000.0/)
-      fh_reg = (/0.5, 0.5, 0.4, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0/)
-      fv_reg = (/0.7, 0.7, 0.7, 0.6, 0.5, 0.3, 0.2, 0.1, 0.0/)
+      call param_ellipsoids(Nsites, coorXsite, coorYsite, OBJsettings, OBJmodReg, OBJglobRefi, a_reg, len_reg, fh_reg, fv_reg)
+
+      Ne = OBJmodReg%NpEllipses
 
       fname = trim(outdir)//'resistivity_attr.dat'
       open (newunit=iu, file=fname, status='replace', action='write')
@@ -1448,7 +1928,7 @@ contains
       ! PARTE 1: Atributos de Región (Nreg = 3: Aire, Mar, Subsuelo)
       ! Formato: ID  Resistividad  RepeatNumber  FixFlag
       ! -----------------------------------------------------------
-      write (iu, '(I2)') OBJmodReg%Nregions
+      write (iu, '(I0)') OBJmodReg%Nregions
       do j = 1, OBJmodReg%Nregions
          !write (iu, '(I0, 2X, ES10.3, 1X, I3, 1X, I3)') ID_regions(j), rhoRegions(j), repRegion(j), fixed(j)
         write (iu, '(I0,2X,ES10.3,2(1X,I3))') OBJmodReg%ID(j), OBJmodReg%rho(j), OBJmodReg%repeatPartition(j), OBJmodReg%isRHOfix(j)
@@ -1457,11 +1937,11 @@ contains
       ! -----------------------------------------------------------
       ! PARTE 2: Elipsoides de Control Regional
       ! -----------------------------------------------------------
-      write (iu, '(3F12.4)') 0.0, 0.0, 0.0  ! Centro (Y, X, Z) en km
-      write (iu, '(F12.4)') 0.0            ! Rotación (grados)
-      write (iu, '(I0)') Ne                ! Número de elipsoides
+      write (iu, '(3(F9.6,1x))') 0.0, 0.0, 0.0  ! Centro (Y, X, Z) en km
+      write (iu, '(F4.1)') 0.0            ! Rotación (grados)
+      write (iu, '(I0)') Ne                 ! Número de elipsoides
       do i = 1, Ne
-         write (iu, '(F10.1, F10.1, 2F8.2)') a_reg(i), len_reg(i), fh_reg(i), fv_reg(i)
+         write (iu, '(4(F6.2,1x))') a_reg(i), len_reg(i), fh_reg(i), fv_reg(i)
       end do
 
       ! -----------------------------------------------------------
@@ -1470,13 +1950,13 @@ contains
       write (iu, '(I0)') Nsites           ! Número de estaciones
       do i = 1, Nsites
          ! Coordenadas (X, Y, Z) en km. Nota: Z viene en metros en tu código.
-         write (iu, '(3(F0.6,2x))') coorXsite(i), coorYsite(i), coorZsite(i)
+         write (iu, '(3(F15.8,2x))') coorXsite(i), coorYsite(i), coorZsite(i)
 
          ! Número de esferas por sitio (Ejemplo: 2 esferas)
          write (iu, '(I0)') OBJmodReg%NparamEsfer
          ! Formato: Radio_km  len_km
          do j = 1, OBJmodReg%NparamEsfer
-            write (iu, '(F5.1, 1X, F5.1)') OBJmodReg%radiusForEsfer(j), OBJmodReg%edgesForEsfer(j)
+            write (iu, '(2(F3.1, 1X))') OBJmodReg%radiusForEsfer(j), OBJmodReg%edgesForEsfer(j)
          end do
 
       end do
@@ -1669,7 +2149,7 @@ contains
       implicit none
 
       type(GlobalRefinement), intent(in) :: OBJmodReg
-      integer :: r, stat
+      integer :: r, stat, dir_exists
       character(len=512) :: cmd
 
       ! -----------------------------
@@ -1677,46 +2157,47 @@ contains
       ! -----------------------------
       call execute_command_line('echo " "')
       call execute_command_line('echo "running tetgen --> Building 2D Mesh including topography"')
-      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly > meshtranTetGen.log 2>&1', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: tetgen execution failed'
       end if
-      call execute_command_line(' cd preprocessing/buildMesh && head output.1.ele')
       call execute_command_line('echo "done..." && sleep 3')
       call execute_command_line('echo " " ')
       call execute_command_line('echo " Preparing mesh refinement " && cd preprocessing/buildMesh && mkdir -p refinement', &
                                 wait=.true., exitstat=stat)
       if (stat /= 0) error stop 'ERROR: could not create refinement directory'
 
-      ! inquire(file='buildMesh/refinement', exist=dir_exists)
-      ! if (dir_exists) then
-      !     write(*,*) 'Refinement directory successfully created.'
-      ! else
-      !     error stop 'ERROR: refinement directory does not exist.'
-      ! endif
+
+      ! call execute_command_line('cd preprocessing/buildMesh && cp ../geometry/* .', &
+      !                           wait=.true., exitstat=stat)
+      ! if (stat /= 0) stop 'ERROR: copying geometry failed'
+      ! call execute_command_line('echo " "')
+
 
       call execute_command_line('cd preprocessing/buildMesh && cp output.1* refinement')
-     call execute_command_line('cd preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: there is no files content refinement parameters'
 
       ! --------------------------------------------------
       ! Iterative refinement
       ! for i in 1 2 ... OBJmodReg%n_iterative_refi
       ! --------------------------------------------------
-      do r = 1, OBJmodReg%n_iterative_refi - 1
-
-         write (cmd, '(A,I0,A)') 'cd preprocessing/buildMesh/refinement && head output.', r, '.ele'
-         call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
-         write (*, '(A,I0)') 'Refinement iteration: ', r
+      pause
+      call execute_command_line('echo " "')
+      call execute_command_line('echo " Refinement step => Iterative tetgen2femtic execution"')
+      r = 1
+      do while (r .le. OBJmodReg%n_iterative_refi)
+         write (*, '(A,I0)') '  🔁 Refinement iteration: ', r
          ! makeMtr output.$r
-         write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/refinement && makeMtr output.', r
+     write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && makeMtr output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in makeMtr'
          ! tetgen ... output.$r
-         write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', r
+         write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in tetgen refinement'
 
+         r = r + 1
       end do
 
       call execute_command_line('echo "Refinement done..." && sleep 1')
@@ -1731,11 +2212,13 @@ contains
       type(GlobalRefinement), intent(inout) :: OBJglobRefi
       type(MeshSettings), intent(in) :: OBJsettings
       character(len=256) :: cmd, fname
-      integer :: stat
+      integer :: stat, last_refinement
       logical :: ex1, ex2, ex3
 
+      last_refinement = OBJglobRefi%n_iterative_refi + 1
+
       call execute_command_line('echo " "')
-      call execute_command_line('echo "Final step: tetgen2femtic execution"')
+      call execute_command_line('echo " Last step => tetgen2femtic execution"')
       call execute_command_line('cd preprocessing/buildMesh && mkdir -p tetgenTOfemtic', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: could not be created tetgenTOfemtic directory'
@@ -1744,14 +2227,15 @@ contains
       select case (OBJsettings%mesh_nature)
       case ('native')
          ! Copiar el último refinement
-     write (cmd, '(A,I0,A)') 'cd preprocessing/buildMesh && cp refinement/output.', OBJglobRefi%n_iterative_refi, '* tetgenTOfemtic'
+         write (cmd, '(A,I0,A)') 'cd preprocessing/buildMesh && cp refinement/output.', last_refinement, '* tetgenTOfemtic'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR copying final refinement to tetgenTOfemtic folder'
 
          call execute_command_line('cd preprocessing/buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
 
          ! Ejecutar TetGen2Femtic con el último número
-         write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output.', OBJglobRefi%n_iterative_refi
+         write (cmd, '(A,I0,A)') 'cd preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output.', last_refinement, &
+            ' > meshtratTetGen2Femtic.log 2>&1'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
 
@@ -1772,20 +2256,20 @@ contains
          call execute_command_line('cd preprocessing/buildMesh && cp resistivity_attr.dat tetgenTOfemtic')
 
          ! Ejecutar TetGen2Femtic con el último número
-         write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output_1b.', OBJglobRefi%n_iterative_refi
+         write (cmd, '(A,I0)') 'cd preprocessing/buildMesh/tetgenTOfemtic && TetGen2Femtic output_1b.', last_refinement
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR running TetGen2Femtic'
 
       end select
 
       write (cmd, '(A,I0,A)') 'cp preprocessing/buildMesh/tetgenTOfemtic/{mesh.dat,resistivity_block_iter0.dat,output.', &
-         OBJglobRefi%n_iterative_refi, '.femtic.vtk} computing'
+         last_refinement, '.femtic.vtk} computing'
       call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
 
       ! Verificación
       inquire (file='computing/mesh.dat', exist=ex1)
       inquire (file='computing/resistivity_block_iter0.dat', exist=ex2)
-      write (fname, '(A,I0,A)') 'computing/output.', OBJglobRefi%n_iterative_refi, '.femtic.vtk'
+      write (fname, '(A,I0,A)') 'computing/output.', last_refinement, '.femtic.vtk'
       inquire (file=fname, exist=ex3)
 
       if (ex1 .and. ex2 .and. ex3) then
