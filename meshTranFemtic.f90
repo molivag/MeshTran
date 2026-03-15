@@ -8,7 +8,7 @@ program femtic_mesh_driver
    type(ParamRefinement) :: paramRefi
    TYPE(MeshSettings)::settings
    type(ModelRegion) :: regions
-   type(SiteSet) :: sites
+   ! type(SiteSet) :: sites
 
    ! Control parameters
    character(len=256), allocatable:: edi_files(:), edi_id(:)
@@ -74,6 +74,9 @@ program femtic_mesh_driver
    call check_domain(dem_x_km, dem_y_km, settings)
 
    ! !Write files in mesh coordinates centered at anchor point
+
+   call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
+   stop
    call define_analysis_domain(settings)
    call write_topography(settings, dem_x_km, dem_y_km, dem_z, n_dem)
    call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z, n_dem)
@@ -166,15 +169,13 @@ contains
             read (val, *) OBJsettings%pad_y
 
             ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-            ! = = = = surface refinement for sites and control  = = = = = = =
+            ! = = = = refinement for sites at the surface and control = = = =
             ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
          case ('NUM_ELIPSES')
             read (val, *) OBJparamRefi%Nelipses
 
          case ('NUM_ESFERAS')
             read (val, *) OBJparamRefi%Nsph
-            print *, 'Desde Reading'
-            print *, OBJparamRefi%Nsph
 
          case ('ROTATION')
             read (val, *) OBJparamRefi%rotation
@@ -182,18 +183,15 @@ contains
          case ('minRADIO')
             read (val, *) OBJparamRefi%minRAD
 
-            print *, 'Desde Reading min'
-            print *, OBJparamRefi%minRAD
          case ('maxRADIO')
             read (val, *) OBJparamRefi%maxRAD
 
-            print *, 'Desde Reading'
-            print *, OBJparamRefi%maxRAD
          case ('minEDGES')
             read (val, *) OBJparamRefi%minEDGE
 
-            ! = = = = = = = = = = = = = = = = = = = = = = = =
-            ! = = = = = = = = = = = = = = = = = = = = = = = =
+         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
+         ! = = = = To build the surface mesh (cascaroin) = = = = = = = = = = 
+         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
          case ('SITEpadding')
             read (val, *) OBJparamRefi%paddingRefi
 
@@ -272,7 +270,6 @@ contains
 
          case ('ID_REGION')
             read (val, *) OBJmodReg%ID
-            print *, 'ID regions', OBJmodReg%id
 
          case ('RHO_REGIONS')
             if (.not. allocated(OBJmodReg%rho)) then
@@ -282,15 +279,12 @@ contains
 
             read (val, *) OBJmodReg%rho
 
-            print *, 'rho region', OBJmodReg%rho
          case ('REP_PARTITION')
             if (.not. allocated(OBJmodReg%repeatPartition)) then
                write (*, *) 'ERROR: REP_PARTITION defined before REGIONS'
                stop
             end if
             read (val, *) OBJmodReg%repeatPartition
-            print *, 'size repeatPartition=', size(OBJmodReg%repeatPartition)
-            print *, 'rep partiton', OBJmodReg%repeatPartition
 
          case ('FIX_RESISTIVITY')
             if (.not. allocated(OBJmodReg%isRHOfix)) then
@@ -298,7 +292,6 @@ contains
                stop
             end if
             read (val, *) OBJmodReg%isRHOfix
-            print *, 'FIX_RESISTIVITY', OBJmodReg%isRHOfix
 
          case ('PARAM_ESFER')
             read (val, *) OBJmodReg%NparamEsfer
@@ -332,6 +325,217 @@ contains
 100   close (iu)
 
    end subroutine read_set_femtic
+!=========================================================
+!=======
+!=========================================================
+   subroutine generate_observe_dat(edi_files, n_files, site_x, site_y)
+      implicit none
+      integer, intent(in) :: n_files
+      character(len=*), intent(in) :: edi_files(n_files)
+      real(dp), intent(in) :: site_x(n_files), site_y(n_files)
+
+      integer :: i, unit_in, unit_out, ios, nf, nf_final, j
+      character(len=512) :: line
+
+      ! Arrays dinámicos para los datos de cada estación
+      real(dp), allocatable :: freq(:), zr(:, :), zi(:, :), zvar(:,:), zerr(:, :), sdSI(:,:)
+      ! El tensor Z en EDI se lee por componentes: XX, XY, YX, YY
+      ! Usaremos un array zr(nf, 4) donde 1=XX, 2=XY, 3=YX, 4=YY
+      logical :: ex1
+      logical, allocatable :: mask(:)  ! Para marcar qué frecuencias se quedan
+
+      ! Variables de control (Estas vendrían de tu archivo de conf)
+      integer :: subsampling_mode
+      real(dp) :: fmin,noise_floor
+      real(dp) :: fmax
+
+      noise_floor = 1.0d-15 ! Epsilon de seguridad para evitar división por cero
+      subsampling_mode = 0   ! 0=No, 1=Sí (Rango fmin/fmax)
+      fmin = 0.01d0          ! Frecuencia mínima deseada
+      fmax = 10.0d0          ! Frecuencia máxima deseada (evita las muy altas)
+
+      open (newunit=unit_out, file='computing/observe_SI.dat', status='replace')
+
+      ! 1. Cabecera Global de FEMTIC
+      write (unit_out, '(A, I6)') 'MT', n_files
+
+      do i = 1, n_files
+         open (newunit=unit_in, file=edi_files(i), status='old', action='read')
+
+         ! 2. Encontrar NFREQ general de la estación
+         nf = 0
+         do
+            read (unit_in, '(A)', iostat=ios) line
+            if (ios /= 0) exit
+            if (index(line, 'NFREQ=') > 0) then
+               read (line(index(line, '=') + 1:), *) nf
+               exit
+            end if
+         end do
+
+         if (nf <= 0) then
+            print *, "Error: NFREQ no encontrado en ", trim(edi_files(i))
+            stop
+         end if
+
+         ! Dimensionar vectores para esta estación específica
+         allocate (freq(nf), zr(nf, 4), zi(nf, 4), zerr(nf, 4), zvar(nf, 4), sdSI(nf,4))
+         allocate (mask(nf))
+
+         ! 3. Leer Frecuencias (>FREQ)
+         call read_edi_block(unit_in, '>FREQ', nf, freq)
+
+         ! 4. Leer Componentes del Tensor (Real, Imag, Varianza)
+         ! XX
+         call read_edi_block(unit_in, '>ZXXR', nf, zr(:, 1))
+         call read_edi_block(unit_in, '>ZXXI', nf, zi(:, 1))
+         call read_edi_block(unit_in, '>ZXX.VAR', nf, zvar(:, 1))
+         ! XY
+         call read_edi_block(unit_in, '>ZXYR', nf, zr(:, 2))
+         call read_edi_block(unit_in, '>ZXYI', nf, zi(:, 2))
+         call read_edi_block(unit_in, '>ZXY.VAR', nf, zvar(:, 2))
+         ! YX
+         call read_edi_block(unit_in, '>ZYXR', nf, zr(:, 3))
+         call read_edi_block(unit_in, '>ZYXI', nf, zi(:, 3))
+         call read_edi_block(unit_in, '>ZYX.VAR', nf, zvar(:, 3))
+         ! YY
+         call read_edi_block(unit_in, '>ZYYR', nf, zr(:, 4))
+         call read_edi_block(unit_in, '>ZYYI', nf, zi(:, 4))
+         call read_edi_block(unit_in, '>ZYY.VAR', nf, zvar(:, 4))
+
+
+         ! --- TRANSFORMACIONES CRÍTICAS ---
+         ! 5. Convertir a unidades SI (V/m / A/m)
+         call convert_EDI_file_units(nf, zvar, zr, zi, sdSI)
+         
+         ! 6. Calcular Error Floor (basado en el 5% y 20%)
+         call apply_error_floor(nf, zr, zi, sdSI, zerr)
+         ! ---------------------------------
+
+         ! 7. Lógica de Subsampling
+         mask = .true.    ! Por defecto todas se quedan
+         nf_final = nf ! Por defecto el número final es el del EDI
+
+         if (subsampling_mode == 1) then
+            nf_final = 0
+            do j = 1, nf
+               ! Si la frecuencia está fuera del rango, la descartamos
+               if (freq(j) < fmin .or. freq(j) > fmax) then
+                  mask(j) = .false.
+               else
+                  nf_final = nf_final + 1
+               end if
+            end do
+         end if
+
+         ! 8. Escritura condicionada
+         ! Si nf_final es 0 porque el rango fue muy estricto, avisar
+         if (nf_final == 0) then
+            print *, "Aviso: Estación ", trim(edi_files(i)), " no tiene frecuencias en el rango."
+         end if
+
+         ! 9. Escribir bloque de estación en observe.dat
+         ! Formato: ID_est, ID_H_field, X, Y (en km o m según tu malla)
+         write (unit_out, '(I6, I6, 1x, 2F12.5)') i, i, site_x(i), site_y(i)
+         write (unit_out, '(I6)') nf_final
+
+         do j = 1, nf
+            if (mask(j)) then
+               ! FEMTIC: Freq, ZxxR, ZxxI, ZxyR, ZxyI, ZyxR, ZyxI, ZyyR, ZyyI, + 8 errores
+               ! Error = sqrt(Varianza)
+               write (unit_out, '(F12.5, 1x, 16(1x, ES12.5))') &
+                  freq(j), &
+                  zr(j, 1), zi(j, 1), zr(j, 2), zi(j, 2), &
+                  zr(j, 3), zi(j, 3), zr(j, 4), zi(j, 4), &
+                  zerr(j, 1), zerr(j, 1), & ! Error XX (R e I)
+                  zerr(j, 2), zerr(j, 2), & ! Error XY
+                  zerr(j, 3), zerr(j, 3), & ! Error YX
+                  zerr(j, 4), zerr(j, 4)   ! Error YY
+            end if
+         end do
+
+         ! deallocate (freq, zr, zi, zvar, mask)
+         deallocate (freq, zr, zi, zvar, zerr, sdSI, mask)
+         close (unit_in)
+
+      end do
+      write(unit_out, '(A)') 'END'
+
+      close (unit_out)
+      inquire (file='computing/observe_SI.dat', exist=ex1)
+
+      if (ex1) then
+         write (*, *) 'Observe.dat file successfully generated into computing/'
+      else
+         write (*, *) 'ERROR: Missing observe.dat file in computing/'
+         write (*, *) 'observe.dat exists? ', ex1
+         error stop
+      end if
+   end subroutine generate_observe_dat
+!=========================================================
+!=======
+!=========================================================
+   subroutine convert_EDI_file_units(nf, zvar, zr, zi, sdSI)
+      real(dp), parameter :: PI = 4 * atan(1.0_16)
+      integer, intent(in) :: nf
+      real(dp), intent(inout) :: zr(nf, 4), zi(nf, 4)
+      real(dp), intent(inout) :: zvar(nf,4)
+      real(dp), INTENT(OUT) :: sdSI(nf,4)
+      real(dp) :: mu0, scale_factor, sd_sigma(nf,4)
+
+      sd_sigma = sqrt(zvar)
+
+      mu0 = 4.0d0 * PI * 1.0E-7 
+      scale_factor = mu0 * 1.0E3  ! De mV/km/nT a V/m / A/m
+
+      zr = zr * scale_factor
+      zi = zi * scale_factor
+      sdSI = sd_sigma * scale_factor
+   end subroutine convert_EDI_file_units
+!=========================================================
+!=======
+!=========================================================
+   subroutine apply_error_floor(nf, zr, zi, SD, zerr)
+      integer,   intent(in) :: nf
+      real(dp),  intent(in) :: zr(nf, 4), zi(nf, 4), SD(nf,4)
+      real(dp),  intent(out) :: zerr(nf, 4)
+      real(dp) :: amp
+      integer  :: j
+
+      do j = 1, nf
+         ! Calculamos amplitud de referencia basada en componentes principales (XY y YX)
+         ! Amp = sqrt( Zxy_r^2 + Zxy_i^2 + Zyx_r^2 + Zyx_i^2 )
+         amp = sqrt(zr(j, 2)**2 + zi(j, 2)**2 + zr(j, 3)**2 + zi(j, 3)**2)
+
+         ! Aplicamos los porcentajes de acuerdo al manual/femticPy
+         zerr(j, 1) = max(SD(j,1), amp * 0.20d0)  ! INdiag  ZXX (20%)
+         zerr(j, 2) = max(SD(j,2), amp * 0.05d0)  ! OFFdiag ZXY (5%)
+         zerr(j, 3) = max(SD(j,3), amp * 0.05d0)  ! OFFdiag ZYX (5%)
+         zerr(j, 4) = max(SD(j,4), amp * 0.20d0)  ! INdiag  ZYY (20%)
+      end do
+   end subroutine apply_error_floor
+!=========================================================
+!=======
+!=========================================================
+   subroutine read_edi_block(unit, tag, n, values)
+      integer, intent(in) :: unit, n
+      character(len=*), intent(in) :: tag
+      real(dp), intent(out) :: values(n)
+
+      character(len=512) :: line
+      integer :: ios
+
+      rewind (unit) ! Volver al inicio para buscar el tag
+      do
+         read (unit, '(A)', iostat=ios) line
+         if (ios /= 0) return
+         if (index(line, trim(tag)) > 0) exit
+      end do
+
+      ! Leer n valores. Fortran automáticamente saltará líneas
+      ! hasta encontrar la cantidad de números solicitada por el array 'values'
+      read (unit, *, iostat=ios) values
+   end subroutine read_edi_block
 !=========================================================
 !=======
 !=========================================================
@@ -410,14 +614,14 @@ contains
       type(MeshSettings), INTENT(IN) :: OBJsettings
       ! Inputs
       integer, intent(in) :: Nsites, unit
-      real(8), intent(in) :: x_0, y_0
-      real(8), intent(in) :: sitex(Nsites), sitey(Nsites)
+      real(dp), intent(in) :: x_0, y_0
+      real(dp), intent(in) :: sitex(Nsites), sitey(Nsites)
 
       ! Local variables
       integer :: ki
-      real(8) :: max_r, dist, current_len, domain_r
-      real(8) :: a1, a_last, a_ratio, current_a, fh, fvp, fvm, t
-      real(8) :: fh_core, fvp_core, fvm_core, fh_final, fvp_final, fvm_final
+      real(dp) :: max_r, dist, current_len, domain_r
+      real(dp) :: a1, a_last, a_ratio, current_a, fh, fvp, fvm, t
+      real(dp) :: fh_core, fvp_core, fvm_core, fh_final, fvp_final, fvm_final
 
       ! ----------------------------------------------------------
       ! 1) Calcular radio máximo desde el centro a las estaciones
@@ -439,10 +643,6 @@ contains
       ! ----------------------------------------------------------
 
       ! Radio del core (zona survey + padding)
-
-      print'(A,2f15.5)', 'esto es x0 y y0', x0, y0
-      print *, ' '
-      print'(A,2f15.5)', 'esto es x_0 y y_0', x_0, y_0
       print'(A,f15.5)', 'esto es max_r', max_r
       a1 = max_r + OBJrefiParam%paddingRefi
 
@@ -450,15 +650,6 @@ contains
       domain_r = max(abs(OBJsettings%xminDOM - x_0), abs(OBJsettings%xmaxDOM - x_0), &
                      abs(OBJsettings%yminDOM - y_0), abs(OBJsettings%ymaxDOM - y_0))
 
-      print *, ' '
-      print *, ' '
-      print'(A,f15.5)', 'esto es xmin', OBJsettings%xminDOM
-      print'(A,f15.5)', 'esto es xmax', OBJsettings%xmaxDOM
-      print'(A,f15.5)', 'esto es ymin', OBJsettings%yminDOM
-      print'(A,f15.5)', 'esto es ymax', OBJsettings%ymaxDOM
-      print *, ' '
-      print *, ' '
-      print *, ' '
       print'(A,f15.5)', 'esto es a1', a1
       print *, ' '
       a_last = domain_r
@@ -651,12 +842,12 @@ contains
    subroutine parse_ref_value(line, value)
       implicit none
       character(len=*), intent(in)  :: line
-      real(8), intent(out)          :: value
+      real(dp), intent(out)          :: value
 
       character(len=:), allocatable:: s
       integer:: ipos, p1, p2
-      real(8):: deg, min, sec
-      real(8):: sign
+      real(dp):: deg, min, sec
+      real(dp):: sign
 
       !----------------------------------------
       ! 1) Extraer texto después del último '='
@@ -769,7 +960,7 @@ contains
 
       integer, intent(in):: n
       character(len=*), intent(in):: edi_files(n)
-      real(8), intent(out)         :: edi_lat(n), edi_lon(n), edi_elev(n)
+      real(dp), intent(out)         :: edi_lat(n), edi_lon(n), edi_elev(n)
       character(len=*), intent(out)         :: edi_id(n)
 
       integer:: i, unit, ios, p1, p2
@@ -830,23 +1021,23 @@ contains
    subroutine edi_to_utm(lat, lon, n_files, x, y, zone)
       implicit none
       integer, intent(in)  :: n_files
-      real(8), intent(in)  :: lat(n_files), lon(n_files)      ! grados decimales
-      real(8), intent(out) :: x(n_files), y(n_files)           ! metros
+      real(dp), intent(in)  :: lat(n_files), lon(n_files)      ! grados decimales
+      real(dp), intent(out) :: x(n_files), y(n_files)           ! metros
       integer, intent(out) :: zone
 
       integer:: i
-      real(8):: lon_mean, east_km(n_files), north_km(n_files)
+      real(dp):: lon_mean, east_km(n_files), north_km(n_files)
 
       ! --- constantes---
-      real(8), parameter:: semieje = 6378137.0d0
-      real(8), parameter:: f = 1.0d0/298.257223563d0
-      real(8), parameter:: k0 = 0.9996d0
-      real(8), parameter:: pi = 3.141592653589793d0
+      real(dp), parameter:: semieje = 6378137.0d0
+      real(dp), parameter:: f = 1.0d0/298.257223563d0
+      real(dp), parameter:: k0 = 0.9996d0
+      real(dp), parameter:: pi = 3.141592653589793d0
 
-      real(8):: e2, ep2
-      real(8):: latr(n_files), lonr(n_files), lon0r
-      real(8):: N(n_files), T(n_files), C(n_files), A(n_files), M(n_files)
-      real(8):: lon0
+      real(dp):: e2, ep2
+      real(dp):: latr(n_files), lonr(n_files), lon0r
+      real(dp):: N(n_files), T(n_files), C(n_files), A(n_files), M(n_files)
+      real(dp):: lon0
 
       ! --- elipsoide---
       e2 = f*(2.0d0 - f)
@@ -902,8 +1093,8 @@ contains
 !=======
 !=========================================================
    subroutine compute_center(x, y, n, x0, y0)
-      real(8), intent(in)  :: x(n), y(n)
-      real(8), intent(out):: x0, y0
+      real(dp), intent(in)  :: x(n), y(n)
+      real(dp), intent(out):: x0, y0
       integer, intent(in)  :: n
 
       x0 = sum(x)/dble(n)
@@ -913,8 +1104,8 @@ contains
 !=======
 !=========================================================
    subroutine recenter_all(n_sites, n_dem, x0, y0, site_x, site_y, dem_x, dem_y)
-      real(8), intent(inout):: site_x(n_sites), site_y(n_sites), dem_x(n_dem), dem_y(n_dem)
-      real(8), intent(in)    :: x0, y0
+      real(dp), intent(inout):: site_x(n_sites), site_y(n_sites), dem_x(n_dem), dem_y(n_dem)
+      real(dp), intent(in)    :: x0, y0
       integer, intent(in)    :: n_sites, n_dem
 
       site_x(:) = site_x(:) - x0
@@ -929,10 +1120,10 @@ contains
    subroutine write_dem_sites_utm(ediID, siteXm, siteYm, nn_sites, demXmts, demYmts, demZmts, &
                                   nn_dem, siteXkm, siteYkm, demXkm, demYkm)
       implicit none
-      real(8), intent(in)  :: siteXm(nn_sites), siteYm(nn_sites), demXmts(nn_dem), demYmts(nn_dem), demZmts(nn_dem)
+      real(dp), intent(in)  :: siteXm(nn_sites), siteYm(nn_sites), demXmts(nn_dem), demYmts(nn_dem), demZmts(nn_dem)
       character(len=*), intent(in)  :: ediID(nn_sites)
       integer, intent(in)  :: nn_sites, nn_dem
-      real(8), intent(out):: siteXkm(nn_sites), siteYkm(nn_sites), demXkm(nn_dem), demYkm(nn_dem)
+      real(dp), intent(out):: siteXkm(nn_sites), siteYkm(nn_sites), demXkm(nn_dem), demYkm(nn_dem)
       character(len=20) :: dir
       integer:: i, iu
 
@@ -980,15 +1171,15 @@ contains
       use mesh_config
       implicit none
       integer, intent(in):: Nsites, NDEM
-      real(8), intent(in):: siteX(Nsites), siteY(Nsites)
-      real(8), intent(in):: DEMcorX(NDEM), DEMcorY(NDEM), DEMcorZ(NDEM)
-      real(8), intent(out):: siteZ(Nsites)
+      real(dp), intent(in):: siteX(Nsites), siteY(Nsites)
+      real(dp), intent(in):: DEMcorX(NDEM), DEMcorY(NDEM), DEMcorZ(NDEM)
+      real(dp), intent(out):: siteZ(Nsites)
       character(len=*) :: ediID(Nsites)
 
       character(len=512):: fname
       integer:: ii, j, jmin, iu
-      real(8):: dx, dy, d2, d2min
-      real(8):: zmin
+      real(dp):: dx, dy, d2, d2min
+      real(dp):: zmin
 
       ! Protección mínima: elevación mínima del DEM
       zmin = minval(DEMcorZ)
@@ -1019,7 +1210,6 @@ contains
       siteZ = siteZ/1000.0d0
       ! end if
       ! Writing final coordinate site files
-      print *, trim(outdir)
       fname = trim(outdir)//'sites_coord_elev.dat'
       open (newunit=iu, file=fname, status='replace', action='write')
       do ii = 1, Nsites
@@ -1058,13 +1248,14 @@ contains
 
       do i = 1, n_sites
          ! Escribimos coordenadas y número de esferas
-         write (iu, '(2F15.6, 1X, I3, 2x)', advance='no') site_x(i), site_y(i), OBJparamRefi%Nsph
+         write (iu, '(2(F12.6, 1X))', advance='yes') site_x(i), site_y(i)
+         write (iu, '(I0)') OBJparamRefi%Nsph
 
          current_r = OBJparamRefi%minRAD
          current_e = OBJparamRefi%minEDGE
 
          do k = 1, OBJparamRefi%Nsph
-            write (iu, '(F7.3, F7.4, 3x)', advance='no') current_r, current_e
+            write (iu, '(F7.3, 2x, F7.4)', advance='yes') current_r, current_e
             ! Actualizamos para la siguiente capa
             current_r = current_r*r_ratio
             current_e = current_e*e_ratio
@@ -1396,9 +1587,9 @@ contains
       real(dp) :: dist, max_r
       real(dp) :: a1, ai
       real(dp) :: max_elem_size
-      real(dp) :: depth_min, depth_last, depth_ratio, depth_i
-      real(dp) :: len1, len_i, t
-      real(dp) :: fh, fvp, fvm, fvm_core, relax, fh_final, fvp_final, depth_ratio_core, depth_ratio_trans
+      real(dp) :: depth_min, depth_last
+      real(dp) :: len_i
+      real(dp) :: fh, fvp, fvm, fh_final, fvp_final, depth_ratio_core, depth_ratio_trans
       real(dp) :: relax_factor, z_core, z_relax_end, n_core, n_trans
       integer :: n_core_i, n_trans_i
       real(dp) :: a_core_end, a_last, a_ratio_core, a_ratio_far, step
@@ -1407,9 +1598,6 @@ contains
       character(len=512) :: fname
 
       z0 = 0.0_dp
-      
-
-
 
       if (cfg%levels < 2) stop "ERROR: mesh.volume.levels debe ser >= 2"
 
@@ -1425,15 +1613,11 @@ contains
       ! ----------------------------------------------------------
       ! 2) a1 (radio core horizontal)
       ! ----------------------------------------------------------
-      print'(A,f15.5)', 'Esto es max_r', max_r
       a1 = max_r + cfg%horizontal_padding
 
       ! Evitar geometría imposible: necesitamos ai > depth_i
       ! (más adelante ajustamos ai si hiciera falta, pero a1 debe ser razonable)
       a1 = max(a1, 1.2_dp*(0.3_dp*cfg%target_depth))  ! usando depth_min interno
-      print*, ' '
-      print'(A,f15.5)', 'Esto es a1', a1
-      print*, ' '
 
       ! ----------------------------------------------------------
       ! 3) cap físico para len (por input file)
@@ -1486,13 +1670,13 @@ contains
       ! Tablas tipo autor (se recortan si n_core_i < 5)
       len_mult = (/0.35_dp, 1.15_dp, 1.8_dp, 3.0_dp, 5.0_dp/)
 
-      ! fh_tab = (/0.5_dp, 0.5_dp, 0.5_dp, 0.3_dp, 0.2_dp/)    !----> refinamiento algo estrecho en y, y cargado en hacia direccion x 
+      ! fh_tab = (/0.5_dp, 0.5_dp, 0.5_dp, 0.3_dp, 0.2_dp/)    !----> refinamiento algo estrecho en y, y cargado en hacia direccion x
       fh_tab = (/0.3_dp, 0.2_dp, 0.1_dp, 0.05_dp, 0.0_dp/)      !----> caso de refinamiento casi circular en xy plane
       ! fh_tab = (/0.8_dp, 0.7_dp, 0.5_dp, 0.5_dp, 0.4_dp/)      !----> caso de refinamiento estecho en y y marcado en x
 
       !tierra
       fvp_tab = (/0.3_dp, 0.3_dp, 0.2_dp, 0.1_dp, 0.1_dp/)
-      
+
       !aire
       fvm_tab = (/0.7_dp, 0.6_dp, 0.5_dp, 0.4_dp, 0.3_dp/)
 
@@ -1526,7 +1710,6 @@ contains
       write (iu, '(F4.2)') OBJrefiParam%rotation
       write (iu, '(I0)') cfg%levels
 
-
       do i = 1, cfg%levels
 
          if (i <= n_core_i) then
@@ -1537,10 +1720,9 @@ contains
             ! len_i = min(cfg%core_resolution*growth, max_elem_size)
 
             len_i = min(cfg%core_resolution*len_mult(i), max_elem_size)
-            
 
             fh = fh_tab(i)
-            fvp = fvp_tab(i)
+            fvp = fvp_tab(i)*1.8
             fvm = fvm_tab(i)
 
          else if (i <= n_core_i + n_trans_i) then
@@ -1654,7 +1836,7 @@ contains
 
       close (iu)
 
-   end subroutine
+   end subroutine write_obs_sites
 
    ! subroutine setGlobalMeshRefinement(xcenter, ycenter, Nglob_ellipses, corXsite, corYsite, nSites, OBJglobRefi)
    !
@@ -1804,7 +1986,6 @@ contains
                      sqrt(xmax**2 + ymin**2), &
                      sqrt(xmax**2 + ymax**2))
 
-      print'(A,f15.5)', 'Esto es a_ratio desde if', domain_r
       ! ----------------------------------------------------------
       ! 3) Radios elipsoidales primera y ultima topada al 95% del maxDOMAIN
       ! ----------------------------------------------------------
@@ -1815,7 +1996,6 @@ contains
 
       if (Ne > 1) then
          a_ratio = max((a_last/a1)**(1.0_dp/real(Ne - 1, dp)), 1.35_dp)
-         print'(A,f15.5)', 'Esto es a_ratio desde if', a_ratio
       else
          a_ratio = 1.0_dp
       end if
@@ -1828,7 +2008,7 @@ contains
       ! ----------------------------------------------------------
       delta_max = skin_depth_km(rho_ref, fmin_hz)
 
-      print'(A,f15.5)', 'Esto es delta_max', delta_max
+      print'(A,f15.5)', '1sto es delta_max', delta_max
       len_cap_phys = frac_delta*delta_max
 
       print'(A,f15.5)', 'Esto es len_cap_sys', len_cap_phys
@@ -1903,9 +2083,9 @@ contains
       ! Inputs
       ! ======================
       integer, intent(in) :: Nsites!, N_regions, N_paramEsfer
-      real(8), intent(in) :: coorXsite(Nsites), coorYsite(Nsites), coorZsite(Nsites)
-      ! real(8), intent(in) :: esferEdges(N_paramEsfer), radiusEsfer(N_paramEsfer)
-      ! real(8), intent(in) :: rhoRegions(N_regions)
+      real(dp), intent(in) :: coorXsite(Nsites), coorYsite(Nsites), coorZsite(Nsites)
+      ! real(dp), intent(in) :: esferEdges(N_paramEsfer), radiusEsfer(N_paramEsfer)
+      ! real(dp), intent(in) :: rhoRegions(N_regions)
       ! integer, intent(in) :: repRegion(N_regions), fixed(N_regions), ID_regions(N_regions)
 
       ! ======================
@@ -1915,7 +2095,7 @@ contains
       character(len=512) :: fname
 
       ! Parámetros para la Parte 2 (Elipsoides Regionales)
-      real(8), DIMENSION(:), allocatable :: a_reg, len_reg, fh_reg, fv_reg
+      real(dp), DIMENSION(:), allocatable :: a_reg, len_reg, fh_reg, fv_reg
 
       call param_ellipsoids(Nsites, coorXsite, coorYsite, OBJsettings, OBJmodReg, OBJglobRefi, a_reg, len_reg, fh_reg, fv_reg)
 
@@ -2149,7 +2329,7 @@ contains
       implicit none
 
       type(GlobalRefinement), intent(in) :: OBJmodReg
-      integer :: r, stat, dir_exists
+      integer :: r, stat
       character(len=512) :: cmd
 
       ! -----------------------------
@@ -2167,22 +2347,19 @@ contains
                                 wait=.true., exitstat=stat)
       if (stat /= 0) error stop 'ERROR: could not create refinement directory'
 
-
       ! call execute_command_line('cd preprocessing/buildMesh && cp ../geometry/* .', &
       !                           wait=.true., exitstat=stat)
       ! if (stat /= 0) stop 'ERROR: copying geometry failed'
       ! call execute_command_line('echo " "')
 
-
       call execute_command_line('cd preprocessing/buildMesh && cp output.1* refinement')
-      call execute_command_line('cd preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
+     call execute_command_line('cd preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: there is no files content refinement parameters'
 
       ! --------------------------------------------------
       ! Iterative refinement
       ! for i in 1 2 ... OBJmodReg%n_iterative_refi
       ! --------------------------------------------------
-      pause
       call execute_command_line('echo " "')
       call execute_command_line('echo " Refinement step => Iterative tetgen2femtic execution"')
       r = 1
