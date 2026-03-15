@@ -26,4 +26,9 @@ module mesh_config
 
    end type MeshSettings
 
+
+   type ObserveSettings
+   end type
+
+
 end module mesh_config
