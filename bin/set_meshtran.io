@@ -26,43 +26,60 @@ PAD_Y = 10.0
 HAS_SEA = NO
 SEA_LEVEL = 0.0
 
-## => Meshing for sites and ellipsoides at the surface
-NUM_ELIPSES = 10
-NUM_ESFERAS = 5
-ROTATION = 0.0
-minRADIO = 0.1              ! 0.3 1.0 3.0 5.0
-maxRADIO = 5.0
-minEDGES = 0.10             !0.05 0.10 0.30 0.50
+## =>  Observation data
+IN_diag_ERR = 0.10
+OFF_diag_ERR = 0.05
+SUBSAMPLING = 0
 
-SITEpadding = 30.0         ! Margen extra sobre el radio de los sites (km)
-FARelemSIZE = 50.0        ! Tamaño máximo de triángulo en el borde (km)
-SURF_RESOLUTION = 0.8     ! len en el centro (km)
+## => If subsampling is one, select the frequency range
+FMIN = 00
+FMAX = 00
+
+
+
+## =>  Ellipsoids Surface Mesh
+NUM_ELIPSES = 10
+SITEpadding = 30.0        ! Margen extra sobre el radio de los sites (km)
+FARelemSIZE = 10.0        ! Tamaño máximo de triángulo en el borde (km)
+SURF_RESOLUTION = 2.0     ! len en el centro (km)
 GROWTH = 2.5              ! Cuánto aumenta 'len' en cada elipse hacia afuera
 
+## => Meshing for sites at the surface
+NUM_ESFERAS = 5
+ROTATION = 0.0
+minRADIO = 0.05        ! Si este num se reduce, mejor formart de esfera y menos elementos pero no se si menos resol, parece que no
+maxRADIO = 15.0
+minEDGES = 0.40        ! Esto controla fuertemente la densidad de elementos en los sites
 
 
-## => Refinement for 3d mesh and sites
-REFI_ELLIPSES = 10
+
+## => Refinement for 3D mesh and sites
+REFI_ELLIPSES = 5
 HIGH_RESOL_LAYER = 1.6    !thikness of high resolution from surface = HRL*TargDep
 
 
 NEAR_FIELD_RESOL = 5      !min elem size at sites (core_resolution)
-FAR_FIELD_RESOL =  50    !max elem size 
+FAR_FIELD_RESOL =  15     !max elem size 
 
-ITER_TET_REFI = 6
-BKGRD_RHO = 100
-F_MIN_HZ = 0.001
+ITER_TET_REFI = 5
 
 !esto controla radio a en makeMTR
 H_PADDING = 15             !horizontal extension beyond last site, a1 = max_distance_site x H_PADDING 
-TARGET_DEPTH = 20
+TARGET_DEPTH = 10
 
 !target depth controlled by following 3
-SITE_ELLIPSES = 6
+SITE_ELLIPSES = 4
 V_PADDING = 2.8             !vertical extension beyond the refinement
 
 
+
+
+
 !esto seria para malla de parametros en makeMTR no influye
+## => Para el calculo del skin depth en el mallado de parametros
+BKGRD_RHO = 100
+F_MIN_HZ = 0.001
+
 FRAC_SKIN_DEPTH = 5.55    !No quiero que el tamaño de elemento (o parámetro) sea mayor que el 25% de la skin depth
 ## => Regions Atributes in the model
 ELLIPSES = 9 
