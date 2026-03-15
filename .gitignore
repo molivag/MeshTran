@@ -7,6 +7,7 @@ computing/
 input_data/
 last_builMesh/
 
+*.pvsm
 *.xyz
 *.dat
 *.ipynb
