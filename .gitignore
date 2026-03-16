@@ -3,6 +3,7 @@ buildMesh/
 _buildMesh1/
 _buildMesh2/
 _preprocessing/
+mod/
 computing/
 input_data/
 last_builMesh/
@@ -13,6 +14,6 @@ last_builMesh/
 *.ipynb
 *.exe
 *.mod
-meshTranPreprocessing
+MeshTran
 
 # set_meshtran.io
