@@ -1,8 +1,8 @@
 # MeshTran
 
-Mesh transformation utilities for FEMTIC-based magnetotelluric workflows.
+Mesh transformation utilities for FEMTIC-based magnetotelluric inverse modeling.
 
-MeshTran is a lightweight preprocessing toolkit designed to prepare spatial data and computational domains for the Finite Element Magnetotelluric Inversion Code, FEMTIC (Usui, U., 2015). 
+MeshTran is a lightweight preprocessing toolkit designed to prepare spatial data and computational domains for the Finite Element Magnetotelluric Inversion Code, FEMTIC (Y. Usui, 2015). 
 The objective of this project is not to replace FEMTIC utilities, but to provide a structured preprocessing layer that simplifies coordinate transformations, domain definition, and mesh preparation steps 
 commonly required before running large-scale MT inversions.
 
@@ -61,11 +61,11 @@ The typical preprocessing pipeline implemented in MeshTran follows these steps:
    - `obs_site.dat`
 
 ### TetGen and convertion to FEMTIC
-    - `output.X.node`
-    - `output.X.ele`
-    - `output.X.face`
-    - `output.X.neigh`
-    - `resistivity_attr.dat`
+   - `output.X.node`
+   - `output.X.ele`
+   - `output.X.face`
+   - `output.X.neigh`
+   - `resistivity_attr.dat`
     
 ### FEMTIC inputs
    - `resistivity_block_iter0.dat`
@@ -180,7 +180,3 @@ collaborate on the project, please open an Issue or submit a Pull Request.
 
 Feedback from the magnetotelluric and geophysical modeling community is
 especially appreciated.
-
-# License
-
-MIT License
