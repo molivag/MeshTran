@@ -14,6 +14,6 @@ last_builMesh/
 *.ipynb
 *.exe
 *.mod
-MeshTran
+meshTran
 
 # set_meshtran.io

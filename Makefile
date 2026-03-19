@@ -7,7 +7,7 @@ MOD_DIR = mod
 BIN_DIR = bin
 
 # Target
-TARGET = ./MeshTran
+TARGET = meshTran
 
 # Source files
 SRC = \
@@ -24,14 +24,16 @@ FFLAGS = -g -traceback -check all -fpe0 -warn all -debug all \
 # Default target
 all: $(TARGET)
 
+$(MOD_DIR):
+	@mkdir -p $(MOD_DIR)
+
 # Link executable
-$(TARGET): 	$(SRC)
-	@$(FC) $(FFLAGS) $^ -o $@
+$(TARGET): $(MOD_DIR) $(SRC)
+	@$(FC) $(FFLAGS) $(SRC) -o $@
 
 # Clean build
 clean:
-	@rm -rf $(MOD_DIR)/*.mod
-	@rm -f *.o
-	@rm MeshTran
+	@rm -rf $(MOD_DIR) 
+	@rm meshTran
 
 .PHONY: all clean
