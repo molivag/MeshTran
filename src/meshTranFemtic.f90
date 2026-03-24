@@ -76,7 +76,6 @@ program femtic_mesh_driver
    ! !Write files in mesh coordinates centered at anchor point
 
    call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
-   stop
    call define_analysis_domain(settings)
    call write_topography(settings, dem_x_km, dem_y_km, dem_z, n_dem)
    call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z, n_dem)
@@ -354,7 +353,7 @@ contains
       fmin = 0.01d0          ! Frecuencia mínima deseada
       fmax = 10.0d0          ! Frecuencia máxima deseada (evita las muy altas)
 
-      open (newunit=unit_out, file='computing/observe_SI.dat', status='replace')
+      open (newunit=unit_out, file='computing/observe.dat', status='replace')
 
       ! 1. Cabecera Global de FEMTIC
       write (unit_out, '(A, I6)') 'MT', n_files
@@ -408,6 +407,8 @@ contains
          ! 5. Convertir a unidades SI (V/m / A/m)
          call convert_EDI_file_units(nf, zvar, zr, zi, sdSI)
          
+         ! 6. Apply conjugate to accomplish FEMTIC time dependence exp(-iωt) 
+         call apply_complex_conjugate(nf,zi)
          ! 6. Calcular Error Floor (basado en el 5% y 20%)
          call apply_error_floor(nf, zr, zi, sdSI, zerr)
          ! ---------------------------------
@@ -462,7 +463,7 @@ contains
       write(unit_out, '(A)') 'END'
 
       close (unit_out)
-      inquire (file='computing/observe_SI.dat', exist=ex1)
+      inquire (file='computing/observe.dat', exist=ex1)
 
       if (ex1) then
          write (*, *) 'Observe.dat file successfully generated into computing/'
@@ -472,6 +473,18 @@ contains
          error stop
       end if
    end subroutine generate_observe_dat
+!=========================================================
+!=======
+!=========================================================
+subroutine apply_complex_conjugate(nf, zi)
+    implicit none
+    integer, intent(in) :: nf
+    real(dp), intent(inout) :: zi(nf, 4)
+    
+    ! Multiplicación por -1 de la parte imaginaria
+    ! Esto rota la fase de +45 (EDI) a -45 (FEMTIC)
+    zi = -1.0d0 * zi
+end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
@@ -491,6 +504,7 @@ contains
       zr = zr * scale_factor
       zi = zi * scale_factor
       sdSI = sd_sigma * scale_factor
+
    end subroutine convert_EDI_file_units
 !=========================================================
 !=======
@@ -498,20 +512,23 @@ contains
    subroutine apply_error_floor(nf, zr, zi, SD, zerr)
       integer,   intent(in) :: nf
       real(dp),  intent(in) :: zr(nf, 4), zi(nf, 4), SD(nf,4)
+      real(dp)              :: amp_xy, amp_yx, amp_ref
       real(dp),  intent(out) :: zerr(nf, 4)
-      real(dp) :: amp
       integer  :: j
 
       do j = 1, nf
-         ! Calculamos amplitud de referencia basada en componentes principales (XY y YX)
-         ! Amp = sqrt( Zxy_r^2 + Zxy_i^2 + Zyx_r^2 + Zyx_i^2 )
-         amp = sqrt(zr(j, 2)**2 + zi(j, 2)**2 + zr(j, 3)**2 + zi(j, 3)**2)
+         ! 1. Calculamos la amplitud individual de las componentes principales
+         amp_xy = sqrt(zr(j, 2)**2 + zi(j, 2)**2)
+         amp_yx = sqrt(zr(j, 3)**2 + zi(j, 3)**2)
+
+         ! 2. Media geométrica de las amplitudes principales
+         amp_ref = sqrt(amp_xy * amp_yx)
 
          ! Aplicamos los porcentajes de acuerdo al manual/femticPy
-         zerr(j, 1) = max(SD(j,1), amp * 0.20d0)  ! INdiag  ZXX (20%)
-         zerr(j, 2) = max(SD(j,2), amp * 0.05d0)  ! OFFdiag ZXY (5%)
-         zerr(j, 3) = max(SD(j,3), amp * 0.05d0)  ! OFFdiag ZYX (5%)
-         zerr(j, 4) = max(SD(j,4), amp * 0.20d0)  ! INdiag  ZYY (20%)
+         zerr(j, 1) = max(SD(j,1), amp_ref * 0.20d0)  ! INdiag  ZXX (20%)
+         zerr(j, 2) = max(SD(j,2), amp_ref * 0.05d0)  ! OFFdiag ZXY (5%)
+         zerr(j, 3) = max(SD(j,3), amp_ref * 0.20d0)  ! OFFdiag ZYX (5%)
+         zerr(j, 4) = max(SD(j,4), amp_ref * 0.05d0)  ! INdiag  ZYY (20%)
       end do
    end subroutine apply_error_floor
 !=========================================================
@@ -1265,61 +1282,6 @@ contains
 
       close (iu)
    end subroutine write_observing_sites
-   ! subroutine write_observing_sites(site_x, site_y, n_sites, OBJparamRefi)
-   !
-   !    implicit none
-   !
-   !    ! ======================
-   !    ! Inputs
-   !    ! ======================
-   !    integer, intent(in):: n_sites
-   !    type(ParamRefinement), INTENT(IN) :: OBJparamRefi
-   !    real(8), intent(in):: site_x(n_sites), site_y(n_sites)
-   !
-   !    ! ======================
-   !    ! Local variables
-   !    ! ======================
-   !    integer:: iu, i, k
-   !    character(len=512):: fname
-   !
-   !    ! ======================
-   !    ! Define spheres (km)
-   !    ! ======================
-   !    ! radius = (/ 0.1d0, 0.3d0, 1.0d0, 3.0d0, 5.0d0 /)
-   !    ! edge   = (/ 0.02d0, 0.05d0, 0.10d0, 0.30d0, 0.50d0 /)
-   !
-   !    ! ======================
-   !    ! Output file
-   !    ! ======================
-   !    fname = trim(outdir)//'/observing_site.dat'
-   !    open (newunit=iu, file=fname, status='replace', action='write', form='formatted')
-   !
-   !    ! ======================
-   !    ! Write number of sites
-   !    ! ======================
-   !    write (iu, '(I9)') n_sites
-   !
-   !    ! ======================
-   !    ! Write each observation site
-   !    ! ======================
-   !    do i = 1, n_sites
-   !
-   !       ! X  Y  Nsph
-   !       write (iu, '(2F15.6, 1X, I3, 2x)', advance='no') site_x(i), site_y(i), OBJparamRefi%Nsph
-   !
-   !       ! (Ri, Li) pairs
-   !       do k = 1, OBJparamRefi%Nsph
-   !          write (iu, '(F5.2, F6.2, 3x)', advance='no') OBJparamRefi%radius(k), OBJparamRefi%edges(k)
-   !       end do
-   !
-   !       ! New line
-   !       write (iu, *)
-   !
-   !    end do
-   !
-   !    close (iu)
-   !
-   ! end subroutine write_observing_sites
 
 !=========================================================
 !=======
@@ -1722,7 +1684,7 @@ contains
             len_i = min(cfg%core_resolution*len_mult(i), max_elem_size)
 
             fh = fh_tab(i)
-            fvp = fvp_tab(i)*1.8
+            fvp = fvp_tab(i)*1.6
             fvm = fvm_tab(i)
 
          else if (i <= n_core_i + n_trans_i) then
@@ -1746,6 +1708,8 @@ contains
 
             ! crecimiento suave de len hasta cap
             len_i = min(len_i*cfg%len_growth, max_elem_size)
+            print'(A,F15.5)', 'growth', len_i*cfg%len_growth
+            print'(A,F15.5)', 'max_elem_size o FAR_FIEL_RESOL', max_elem_size
 
             !    fh = (1.0_dp - t)*cfg%fh_core_vol + t*fh_final
             !    fh = max(0.0_dp, min(fh, 0.99_dp))

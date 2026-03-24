@@ -27,11 +27,11 @@ module mesh_entities
       real(dp)    :: fmin_hz
 
       ! Internos (no TOML por ahora)
-      real(dp)    :: a_ratio           = 1.3_dp       !refinamiento más alargado horizontalmente
-      real(dp)    :: len_growth        = 2.65_dp       !factor de crecimiento del tamaño de elemento
-      real(dp)    :: vol_len_factor    = 1.6_dp       !volumen máximo permitido del tetraedro
-      real(dp)    :: air_c_over_a_core = 0.30_dp      !casquete elipsoidal encima del core
-      real(dp)    :: fh_core_vol       = 0.30_dp      !factor de refinamiento volumétrico dentro del core.
+      real(dp)    :: a_ratio           = 1.3_dp    !refinamiento más alargado horizontalmente
+      real(dp)    :: len_growth        = 2.65_dp   !factor de crecimiento del tamaño de elemento
+      real(dp)    :: vol_len_factor    = 1.6_dp    !volumen máximo permitido del tetraedro
+      real(dp)    :: air_c_over_a_core = 0.30_dp   !casquete elipsoidal encima del core
+      real(dp)    :: fh_core_vol       = 0.30_dp   !factor de refinamiento volumétrico dentro del core.
    end type GlobalRefinement
 
    type :: ParamRefinement
