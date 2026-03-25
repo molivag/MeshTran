@@ -9,15 +9,16 @@ MESH_NATURE = native
 
 DEM_FILE = TOTPO_KAL_BBMT_FLAT_475m.xyz
 DEM_UNITS = kilometers 
+assumming elevation in meters
 
 TOPO_FILE = topography_for.dat 
 BATHY_FILE = bathymetry_for.dat
 COSLI_FILE = coast_line.dat
 
-XMIN_DOM = -170.0
-XMAX_DOM =  170.0
-YMIN_DOM = -170.0
-YMAX_DOM =  170.0
+XMIN_DOM = -40.0
+XMAX_DOM =  40.0
+YMIN_DOM = -50.0
+YMAX_DOM =  50.0
 ZMIN_DOM = -50.0
 ZMAX_DOM =  50.0
 
