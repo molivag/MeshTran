@@ -16,10 +16,18 @@ $(SRC_DIR)/mesh_entities.f90 \
 $(SRC_DIR)/meshTranFemtic.f90
 
 # Flags
-FFLAGS = -g -traceback -check all -fpe0 -warn all -debug all \
-         -mcmodel large -fp-stack-check -check noarg_temp_created \
-         -diag-disable=10448 \
-         -module $(MOD_DIR)
+# FFLAGS = -g -traceback -check all -fpe0 -warn all -debug all \
+#          -mcmodel large -fp-stack-check -check noarg_temp_created \
+#          -diag-disable=10448 \
+#
+FFLAGS = -diag-disable=10448
+FFLAGS += -stand f08
+FFLAGS += -g -debug all
+FFLAGS += -warn all
+FFLAGS += -O0 -heap-arrays
+FFLAGS += -check all -traceback -mcmodel large -fp-stack-check -check noarg_temp_created
+FFLAGS += -qmkl
+FFLAGS += -module $(MOD_DIR)
 
 # Default target
 all: $(TARGET)
