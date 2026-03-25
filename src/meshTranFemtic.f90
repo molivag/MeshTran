@@ -12,19 +12,17 @@ program femtic_mesh_driver
 
    ! Control parameters
    character(len=256), allocatable:: edi_files(:), edi_id(:)
-   ! logical:: has_sea
-   ! real(dp):: xminDOM, xmaxDOM, yminDOM, ymaxDOM!, zminDOM, zmaxDOM, pad_x, pad_y,
-   real(dp), allocatable:: edi_lat(:), edi_lon(:), edi_elev(:), site_x_km(:), site_y_km(:), dem_x_km(:), dem_y_km(:)
-   real(dp)::  sea_level, x0, y0
-
+   real(dp), allocatable:: edi_lat(:), edi_lon(:), edi_elev(:)
+   real(dp), allocatable:: site_x_km(:), site_y_km(:), site_z_km(:), dem_x_km(:), dem_y_km(:), dem_z_km(:)
+   real(dp)::  sea_level, x0, y0,z0
    ! DEM data
-   integer:: i, n_dem, zone, n_edi_files, n_sites!, Nsph, n_elipses, ellipsForSite, NparamEsfer, Nregions, refi_tetgen
+   integer:: n_dem, n_edi_files, n_sites
    real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
 
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-   call read_set_femtic('bin/set_meshtran.io', settings, paramRefi, globRefi, regions)
+   call read_set_femtic('set_meshtran.io', settings, paramRefi, globRefi, regions)
    !---------------------------------------------------
    !     Check if Read input configutation file
    !---------------------------------------------------
@@ -33,7 +31,8 @@ program femtic_mesh_driver
    !     Read Digital Elevation Model
    !---------------------------------------------------
    call read_dem(settings, dem_x, dem_y, dem_z, n_dem)
-   allocate (dem_x_km(n_dem), dem_y_km(n_dem))
+   allocate (dem_x_km(n_dem), dem_y_km(n_dem), dem_z_km(n_dem))
+   !Due to elevation in DEM is in mts, then after here the dem_z is in km
 
    !---------------------------------------------------
    !     Read EDI files
@@ -42,47 +41,64 @@ program femtic_mesh_driver
    n_sites = n_edi_files
    allocate (edi_id(n_edi_files), edi_lat(n_edi_files), edi_lon(n_edi_files), edi_elev(n_edi_files))
    allocate (site_x(n_edi_files), site_y(n_edi_files), site_z(n_edi_files), fix_elev_site(n_sites))
-   ALLOCATE (site_x_km(n_edi_files), site_y_km(n_edi_files))
+   ALLOCATE (site_x_km(n_edi_files), site_y_km(n_edi_files), site_z_km(n_edi_files))
+
+   print'(A,f15.5)',"Esto es ----> dem_z:",dem_z(9)
+   !Here it is obtained the coordinates of DEM
    call read_edi_files(edi_files, n_edi_files, edi_id, edi_lat, edi_lon, edi_elev)
 
    !---------------------------------------------------
    !     Convert Lat-Long to UTm
    !---------------------------------------------------
    !                                                esto deberia llamarse edi_x y edi_y
-   call edi_to_utm(edi_lat, edi_lon, n_edi_files, site_x, site_y, zone)
+   call edi_to_utm_km(edi_lat, edi_lon, n_edi_files, site_x, site_y)
 
    call write_dem_sites_utm(edi_id, site_x, site_y, n_edi_files, dem_x, &
                             dem_y, dem_z, n_dem, site_x_km, site_y_km, dem_x_km, dem_y_km)
 
    dem_x_km = dem_x
    dem_y_km = dem_y
-   site_y_km = site_y
-   site_x_km = site_x
+   dem_z_km = dem_z * 1.0d-3
 
+   site_x_km = site_x
+   site_y_km = site_y
+   site_z_km = edi_elev * 1.0d-3
+
+   print*, ' '
+   print*, ' '
+   print'(A,f15.5)',"Esto es dem_z:",dem_z(9)
+   print'(A,f15.5)',"Esto es dem_z_km:",site_z_km(9)
+   print*, ' '
+   print*, ' '
    !---------------------------------------------------
    !     Compute anchor point (central point) of analysis domain based on sites locations
    !---------------------------------------------------
-   call compute_center(site_x_km, site_y_km, n_edi_files, x0, y0)
+   call compute_center(site_x_km, site_y_km, site_z_km, n_edi_files, x0, y0, z0)
+   print'(A,f15.5)', "this is x0: ",x0
+   print'(A,f15.5)', "this is y0: ",y0
+   print'(A,f15.5)', "this is z0: ",z0
    !---------------------------------------------------
    !     Recenter
    !---------------------------------------------------
-   call recenter_all(n_edi_files, n_dem, x0, y0, site_x_km, site_y_km, dem_x_km, dem_y_km)
+   call recenter_all(n_edi_files, n_dem, x0, y0, z0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
+   print*, dem_x_km(9)
+   print*, dem_z_km(9)
    !a parti de aqui coordenadas de malla
-   call snap_sites_to_dem(edi_id, site_x_km, site_y_km, n_sites, dem_x, dem_y, dem_z, n_dem, fix_elev_site)
-   ! !Check if DEM cover whole analysis domain+padding area
-   ! call check_domain(dem_x_km, dem_y_km, xminDOM, xmaxDOM, yminDOM, ymaxDOM, pad_x, pad_y)
+   print'(A,f15.5)', "Esto es dem_z_km despues de recenter: ", dem_z_km(2)
+   print'(A,f15.5)', "Esto es siteCord_z despues de recenter: ", site_z_km(2)
+   call snap_sites_to_dem(edi_id, site_x_km, site_y_km, n_sites, dem_x, dem_y, dem_z_km, n_dem, fix_elev_site)
+   print'(A,f15.5)', "Esto es despues de snap_sites: ", fix_elev_site(2)
    call check_domain(dem_x_km, dem_y_km, settings)
 
    ! !Write files in mesh coordinates centered at anchor point
-
    call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
    call define_analysis_domain(settings)
-   call write_topography(settings, dem_x_km, dem_y_km, dem_z, n_dem)
-   call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z, n_dem)
+
+   call write_topography(settings, dem_x_km, dem_y_km, dem_z_km, n_dem)
+   call write_bathymetry(settings, dem_x_km, dem_y_km, dem_x_km, n_dem)
    call write_coast_line(settings)
    call write_observing_sites(site_x_km, site_y_km, n_edi_files, paramRefi)
    call control_mesh(x0, y0, site_x_km, site_y_km, n_edi_files, settings, paramRefi)
-
    call write_makeMtr_param(0.0d0, 0.0d0, site_x_km, site_y_km, n_edi_files, paramRefi, globRefi)
    call write_obs_sites(site_x_km, site_y_km, fix_elev_site, n_edi_files, paramRefi)
 
@@ -93,6 +109,23 @@ program femtic_mesh_driver
    call run_TetGen2Femtic(settings, globRefi)
 
 contains
+
+! subroutine prepare_model_inputs(edi_files, n_edi_files, site_x_km, site_y_km, &
+!                                settings, dem_x_km, dem_y_km, dem_z, n_dem, &
+!                                paramRefi, globRefi, fix_elev_site, regions)
+!
+!    call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
+!    call define_analysis_domain(settings)
+!    call write_topography(settings, dem_x_km, dem_y_km, dem_z, n_dem)
+!    call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z, n_dem)
+!    call write_coast_line(settings)
+!    call write_observing_sites(site_x_km, site_y_km, n_edi_files, paramRefi)
+!    call control_mesh(x0, y0, site_x_km, site_y_km, n_edi_files, settings, paramRefi)
+!    call write_makeMtr_param(0.0d0, 0.0d0, site_x_km, site_y_km, n_edi_files, paramRefi, globRefi)
+!    call write_obs_sites(site_x_km, site_y_km, fix_elev_site, n_edi_files, paramRefi)
+!    call resistivitty_attribute(n_sites, site_x_km, site_y_km, fix_elev_site, settings, globRefi, regions)
+!
+! end subroutine
    !=========================================================
    !=======
    !=========================================================
@@ -327,10 +360,10 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine generate_observe_dat(edi_files, n_files, site_x, site_y)
+   subroutine generate_observe_dat(EDIfiles, n_files, site_x, site_y)
       implicit none
       integer, intent(in) :: n_files
-      character(len=*), intent(in) :: edi_files(n_files)
+      character(len=*), intent(in) :: EDIfiles(n_files)
       real(dp), intent(in) :: site_x(n_files), site_y(n_files)
 
       integer :: i, unit_in, unit_out, ios, nf, nf_final, j
@@ -359,7 +392,7 @@ contains
       write (unit_out, '(A, I6)') 'MT', n_files
 
       do i = 1, n_files
-         open (newunit=unit_in, file=edi_files(i), status='old', action='read')
+         open (newunit=unit_in, file=EDIfiles(i), status='old', action='read')
 
          ! 2. Encontrar NFREQ general de la estación
          nf = 0
@@ -373,7 +406,7 @@ contains
          end do
 
          if (nf <= 0) then
-            print *, "Error: NFREQ no encontrado en ", trim(edi_files(i))
+            print *, "Error: NFREQ no encontrado en ", trim(EDIfiles(i))
             stop
          end if
 
@@ -432,7 +465,7 @@ contains
          ! 8. Escritura condicionada
          ! Si nf_final es 0 porque el rango fue muy estricto, avisar
          if (nf_final == 0) then
-            print *, "Aviso: Estación ", trim(edi_files(i)), " no tiene frecuencias en el rango."
+            print *, "Aviso: Estación ", trim(EDIfiles(i)), " no tiene frecuencias en el rango."
          end if
 
          ! 9. Escribir bloque de estación en observe.dat
@@ -556,14 +589,14 @@ end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
-   subroutine control_mesh(x0, y0, siteX, siteY, n_sites, OBJsettings, OBJparamRefi)
+   subroutine control_mesh(xCenter, yCenter, siteX, siteY, Nsites, OBJsettings, OBJparamRefi)
 
       implicit none
 
       integer :: iu, ios
-      integer, intent(in) :: n_sites
-      real(dp), intent(in) :: x0, y0
-      real(dp), intent(in) :: siteX(n_sites), siteY(n_sites)
+      integer, intent(in) :: Nsites
+      real(dp), intent(in) :: xCenter, yCenter
+      real(dp), intent(in) :: siteX(Nsites), siteY(Nsites)
       type(MeshSettings), intent(in) :: OBJsettings
       type(ParamRefinement), INTENT(IN) :: OBJparamRefi
 
@@ -591,7 +624,7 @@ end subroutine apply_complex_conjugate
       !-----------------------------------------
       ! Escribir elipsoides
       !-----------------------------------------
-      call surface_ellipsoids(x0, y0, siteX, siteY, n_sites, OBJsettings, OBJparamRefi, iu)
+      call surface_ellipsoids(xCenter, yCenter, siteX, siteY, Nsites, OBJsettings, OBJparamRefi, iu)
 
       !-----------------------------------------
       ! Bloque INTERPOLATE y otros
@@ -649,7 +682,7 @@ end subroutine apply_complex_conjugate
          print'(2f15.5)', sitex(ki), sitey(ki)
       end do
       max_r = 0.0d0
-      do ki = 1, n_sites
+      do ki = 1, Nsites
          dist = sqrt((sitex(ki))**2 + (sitey(ki))**2)
          if (dist > max_r) max_r = dist
       end do
@@ -718,39 +751,6 @@ end subroutine apply_complex_conjugate
 
 10    format(F7.2, 1X, F6.2, 1X, F6.3, 1X, F6.3, 1X, F6.3)
    end subroutine surface_ellipsoids
-
-   ! subroutine surface_ellipsoids(x0, y0, site_x, site_y, n_sites, config)
-   !     ! ... declaraciones de variables ...
-   !     real :: max_r, current_a, current_len
-   !     integer :: i
-   !
-   !     ! 1. Calcular el radio máximo desde el centro (x0, y0) a la estación más lejana
-   !     max_r = 0.0
-   !     do i = 1, n_sites
-   !         dist = sqrt((site_x(i)-x0)**2 + (site_y(i)-y0)**2)
-   !         if (dist > max_r) max_r = dist
-   !     end do
-   !
-   !     ! 2. Radio inicial de la elipse core
-   !     current_a = max_r + config%core_radius_padding
-   !     current_len = config%core_resolution
-   !
-   !     ! Escribir encabezado del control.dat (puntos de rotación, etc)
-   !     write(unit, *) 0.0  ! Rotation
-   !     write(unit, *) config%levels ! Número de elipses
-   !
-   !     ! 3. Bucle para generar las elipses (Matrioshka de superficie)
-   !     do i = 1, config%levels
-   !         ! Escribimos: a, len, fh, fvp, fvm
-   !         ! Usamos fvm=0.99 para que sea un disco plano en superficie
-   !         write(unit, '(F10.2, F10.2, F10.2, F10.2, F10.2)') &
-   !             current_a, current_len, 0.0, 0.0, 0.99
-   !
-   !         ! Actualizamos para la siguiente capa hacia afuera
-   !         current_a = current_a * 1.5   ! Expandimos el radio
-   !         current_len = min(current_len * config%growth_factor, config%boundary_resolution)
-   !     end do
-   ! end subroutine
 !=========================================================
 !=======
 !=========================================================
@@ -785,7 +785,7 @@ end subroutine apply_complex_conjugate
          ! y(i) = yy*scale
          x(i) = yy*scale   ! North → X ; applying MT convention
          y(i) = xx*scale   ! East  → Y ; applying MT convention
-         z(i) = zz*scale
+         z(i) = zz*scale 
       end do
       close (iu)
    end subroutine
@@ -908,12 +908,12 @@ end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
-   subroutine get_edi_file_list(edi_files, n_files)
+   subroutine get_edi_file_list(EDIfiles, n_files)
 
       use iso_fortran_env, only: error_unit
       implicit none
 
-      character(len=256), allocatable, intent(out):: edi_files(:)
+      character(len=256), allocatable, intent(out):: EDIfiles(:)
       integer, intent(out):: n_files
 
       integer:: unit, ios
@@ -952,14 +952,14 @@ end subroutine apply_complex_conjugate
       !------------------------------------------------------------
       ! 3) Alocar vector de archivos
       !------------------------------------------------------------
-      allocate (edi_files(n_files))
+      allocate (EDIfiles(n_files))
 
       !------------------------------------------------------------
       ! 4) Leer nombres de archivo
       !------------------------------------------------------------
       open (newunit=unit, file=tmpfile, status="old", action="read")
       do ios = 1, n_files
-         read (unit, '(A)') edi_files(ios)
+         read (unit, '(A)') EDIfiles(ios)
       end do
       close (unit)
 
@@ -972,13 +972,13 @@ end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_edi_files(edi_files, n, edi_id, edi_lat, edi_lon, edi_elev)
+   subroutine read_edi_files(EDIfiles, n, EDIid, EDIlat, EDIlong, EDIelev)
       implicit none
 
       integer, intent(in):: n
-      character(len=*), intent(in):: edi_files(n)
-      real(dp), intent(out)         :: edi_lat(n), edi_lon(n), edi_elev(n)
-      character(len=*), intent(out)         :: edi_id(n)
+      character(len=*), intent(in)     :: EDIfiles(n)
+      real(dp), intent(out)            :: EDIlat(n), EDIlong(n), EDIelev(n)
+      character(len=*), intent(out)    :: EDIid(n)
 
       integer:: i, unit, ios, p1, p2
       character(len=512):: line
@@ -992,7 +992,7 @@ end subroutine apply_complex_conjugate
          found_lon = .false.
          found_elev = .false.
 
-         open (newunit=unit, file=edi_files(i), status="old", action="read")
+         open (newunit=unit, file=EDIfiles(i), status="old", action="read")
 
          do
             read (unit, '(A)', iostat=ios) line
@@ -1001,22 +1001,22 @@ end subroutine apply_complex_conjugate
             if (index(line, 'DATAID=') > 0) then
                p1 = index(line, '"')
                p2 = index(line(p1 + 1:), '"') + p1
-               edi_id(i) = line(p1 + 1:p2 - 1)
+               EDIid(i) = line(p1 + 1:p2 - 1)
                found_id = .true.
             end if
 
             if (index(line, 'REFLAT=') > 0) then
-               call parse_ref_value(line, edi_lat(i))
+               call parse_ref_value(line, EDIlat(i))
                found_lat = .true.
             end if
 
             if (index(line, 'REFLONG=') > 0) then
-               call parse_ref_value(line, edi_lon(i))
+               call parse_ref_value(line, EDIlong(i))
                found_lon = .true.
             end if
 
             if (index(line, 'REFELEV=') > 0) then
-               read (line(index(line, '=') + 1:), *) edi_elev(i)
+               read (line(index(line, '=') + 1:), *) EDIelev(i)
                found_elev = .true.
             end if
 
@@ -1026,23 +1026,23 @@ end subroutine apply_complex_conjugate
          close (unit)
 
          if (.not. (found_lat .and. found_lon .and. found_elev)) then
-            print *, "ERROR: Missing coordinates in ", trim(edi_files(i))
+            print *, "ERROR: Missing coordinates in ", trim(EDIfiles(i))
             stop
          end if
       end do
+
    end subroutine read_edi_files
 
 !=========================================================
 !=======
 !=========================================================
-   subroutine edi_to_utm(lat, lon, n_files, x, y, zone)
+   subroutine edi_to_utm_km(lat, lon, n_files, x, y)
       implicit none
       integer, intent(in)  :: n_files
       real(dp), intent(in)  :: lat(n_files), lon(n_files)      ! grados decimales
       real(dp), intent(out) :: x(n_files), y(n_files)           ! metros
-      integer, intent(out) :: zone
 
-      integer:: i
+      integer:: i, zone
       real(dp):: lon_mean, east_km(n_files), north_km(n_files)
 
       ! --- constantes---
@@ -1105,31 +1105,41 @@ end subroutine apply_complex_conjugate
       x = north_km   ! X = Norte
       y = east_km    ! Y = Este
 
-   end subroutine edi_to_utm
+   end subroutine edi_to_utm_km
 !=========================================================
 !=======
 !=========================================================
-   subroutine compute_center(x, y, n, x0, y0)
-      real(dp), intent(in)  :: x(n), y(n)
-      real(dp), intent(out):: x0, y0
+   subroutine compute_center(x, y, z, n, xCenter, yCenter, zCenter)
       integer, intent(in)  :: n
+      real(dp), intent(in)  :: x(n), y(n), z(n)
+      real(dp), intent(out):: xCenter, yCenter, zCenter
 
-      x0 = sum(x)/dble(n)
-      y0 = sum(y)/dble(n)
+      print'(A,F15.5)', "Esto es Z en compute_center", z(2)
+      xCenter = sum(x)/dble(n)
+      yCenter = sum(y)/dble(n)
+      zCenter = sum(z)/dble(n)
    end subroutine
 !=========================================================
 !=======
 !=========================================================
-   subroutine recenter_all(n_sites, n_dem, x0, y0, site_x, site_y, dem_x, dem_y)
-      real(dp), intent(inout):: site_x(n_sites), site_y(n_sites), dem_x(n_dem), dem_y(n_dem)
-      real(dp), intent(in)    :: x0, y0
-      integer, intent(in)    :: n_sites, n_dem
+   subroutine recenter_all(Nsites, nDEM, xCenter, yCenter, zCenter, siteCord_x, siteCord_y, siteCord_z, demx, demY, demZ)
+      integer, intent(in)    :: Nsites, nDEM
+      real(dp), intent(in)    :: xCenter, yCenter, zCenter
+      real(dp), intent(inout):: siteCord_x(Nsites), siteCord_y(Nsites), siteCord_z(Nsites)
+      real(dp), intent(inout):: demX(nDEM), demY(nDEM),demZ(nDEM)
+      integer :: i
 
-      site_x(:) = site_x(:) - x0
-      site_y(:) = site_y(:) - y0
+      siteCord_x(:) = siteCord_x(:) - xCenter
+      siteCord_y(:) = siteCord_y(:) - yCenter
+      siteCord_z(:) = siteCord_z(:) - zCenter
 
-      dem_x(:) = dem_x(:) - x0
-      dem_y(:) = dem_y(:) - y0
+      demX(:) = demX(:) - xCenter
+      demY(:) = demY(:) - yCenter
+      demZ(:) = demZ(:) - zCenter
+
+      do i =1,nDEM
+         if (abs(demZ(i)) < 1.0d-15) demZ(i) = 0.0d0
+      enddo
    end subroutine
 !=========================================================
 !=======
@@ -1137,9 +1147,9 @@ end subroutine apply_complex_conjugate
    subroutine write_dem_sites_utm(ediID, siteXm, siteYm, nn_sites, demXmts, demYmts, demZmts, &
                                   nn_dem, siteXkm, siteYkm, demXkm, demYkm)
       implicit none
+      integer, intent(in)  :: nn_sites, nn_dem
       real(dp), intent(in)  :: siteXm(nn_sites), siteYm(nn_sites), demXmts(nn_dem), demYmts(nn_dem), demZmts(nn_dem)
       character(len=*), intent(in)  :: ediID(nn_sites)
-      integer, intent(in)  :: nn_sites, nn_dem
       real(dp), intent(out):: siteXkm(nn_sites), siteYkm(nn_sites), demXkm(nn_dem), demYkm(nn_dem)
       character(len=20) :: dir
       integer:: i, iu
@@ -1190,7 +1200,7 @@ end subroutine apply_complex_conjugate
       integer, intent(in):: Nsites, NDEM
       real(dp), intent(in):: siteX(Nsites), siteY(Nsites)
       real(dp), intent(in):: DEMcorX(NDEM), DEMcorY(NDEM), DEMcorZ(NDEM)
-      real(dp), intent(out):: siteZ(Nsites)
+      real(dp), intent(inout):: siteZ(Nsites)
       character(len=*) :: ediID(Nsites)
 
       character(len=512):: fname
@@ -1200,7 +1210,7 @@ end subroutine apply_complex_conjugate
 
       ! Protección mínima: elevación mínima del DEM
       zmin = minval(DEMcorZ)
-      if (zmin < 1.0d0) zmin = 1.0d0   ! nunca 0 ni negativa
+      ! if (zmin < 1.0d0) zmin = 1.0d-3   ! nunca 0 ni negativa
 
       do ii = 1, Nsites
          d2min = huge(1.0d0)
@@ -1223,10 +1233,8 @@ end subroutine apply_complex_conjugate
          if (siteZ(ii) < zmin) siteZ(ii) = zmin
       end do
 
-      ! if (OBJsetting%dem_units == 'kilometer') then
-      siteZ = siteZ/1000.0d0
-      ! end if
       ! Writing final coordinate site files
+      ! siteZ = siteZ/1000.0d0
       fname = trim(outdir)//'sites_coord_elev.dat'
       open (newunit=iu, file=fname, status='replace', action='write')
       do ii = 1, Nsites
@@ -1239,13 +1247,13 @@ end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_observing_sites(site_x, site_y, n_sites, OBJparamRefi)
+   subroutine write_observing_sites(siteCorX, siteCorY, Nsites, OBJparamRefi)
 
       implicit none
 
       type(ParamRefinement), intent(in) :: OBJparamRefi
-      integer, intent(in) :: n_sites
-      real(dp), intent(in) :: site_x(n_sites), site_y(n_sites)
+      integer, intent(in) :: Nsites
+      real(dp), intent(in) :: siteCorX(Nsites), siteCorY(Nsites)
 
       integer :: iu, i, k
       real(dp) :: r_ratio, e_ratio, current_r, current_e
@@ -1261,11 +1269,11 @@ end subroutine apply_complex_conjugate
       fname = trim(outdir)//'/observing_site.dat'
       open (newunit=iu, file=fname, status='replace', action='write')
 
-      write (iu, '(I9)') n_sites
+      write (iu, '(I9)') Nsites
 
-      do i = 1, n_sites
+      do i = 1, Nsites
          ! Escribimos coordenadas y número de esferas
-         write (iu, '(2(F12.6, 1X))', advance='yes') site_x(i), site_y(i)
+         write (iu, '(2(F12.6, 1X))', advance='yes') siteCorX(i), siteCorY(i)
          write (iu, '(I0)') OBJparamRefi%Nsph
 
          current_r = OBJparamRefi%minRAD
@@ -1286,9 +1294,9 @@ end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
-   subroutine define_analysis_domain(settings)
+   subroutine define_analysis_domain(OBJsettings)
       implicit none
-      type(MeshSettings), INTENT(IN) :: settings
+      type(MeshSettings), INTENT(IN) :: OBJsettings
 
       integer:: iu
 
@@ -1298,9 +1306,9 @@ end subroutine apply_complex_conjugate
       ! ymax = maxval(y) + pad_y
 
       open (newunit=iu, file=trim(outdir)//"analysis_domain.dat", status='replace', action='write')
-      write (iu, '(2F10.2)') settings%xminDOM, settings%xmaxDOM
-      write (iu, '(2F10.2)') settings%yminDOM, settings%ymaxDOM
-      write (iu, '(2F10.2)') settings%zminDOM, settings%zmaxDOM
+      write (iu, '(2F10.2)') OBJsettings%xminDOM, OBJsettings%xmaxDOM
+      write (iu, '(2F10.2)') OBJsettings%yminDOM, OBJsettings%ymaxDOM
+      write (iu, '(2F10.2)') OBJsettings%zminDOM, OBJsettings%zmaxDOM
       close (iu)
 
    end subroutine
@@ -1310,12 +1318,12 @@ end subroutine apply_complex_conjugate
    subroutine write_topography(OBJsettings, x, y, z, n)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
-      real(dp), intent(in)    :: x(:), y(:)
       integer, intent(in)     :: n
-      real(dp), INTENT(INOUT) :: z(:)
+      real(dp), intent(in)    :: x(n), y(n), z(n)
+      ! real(dp), INTENT(INOUT) :: z(:)
       integer                 :: i, iu
 
-      z = z/1000.0d0
+      ! z = z/1000.0d0
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
       do i = 1, n
@@ -1340,12 +1348,12 @@ end subroutine apply_complex_conjugate
 
       implicit none
       TYPE(MeshSettings), INTENT(IN) :: OBJsettings
-      real(dp), intent(in):: x(:), y(:)
-      real(dp), INTENT(INOUT) :: z(:)
+      real(dp), intent(in):: x(:), y(:), z(:)
+      ! real(dp), INTENT(INOUT) :: z(:)
       integer, intent(in):: n
-      integer:: j, iu
+      integer:: i, j, iu
 
-      z = z/1000.0d0
+      ! z = z/1000.0d0
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%bathymetry_file, status='replace')
       do j = 1, n
@@ -1534,7 +1542,7 @@ end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_makeMtr_param(xcenter, ycenter, site_x, site_y, Nsites, OBJrefiParam, cfg)
+   subroutine write_makeMtr_param(xcenter, ycenter, siteCorX, siteCorY, Nsites, OBJrefiParam, cfg)
 
       implicit none
 
@@ -1542,7 +1550,7 @@ end subroutine apply_complex_conjugate
       type(ParamRefinement), INTENT(IN)   :: OBJrefiParam
       integer, intent(in)                 :: Nsites
       real(dp), intent(in)                :: xcenter, ycenter
-      real(dp), intent(in)                :: site_x(Nsites), site_y(Nsites)
+      real(dp), intent(in)                :: siteCorX(Nsites), siteCorY(Nsites)
 
       integer :: iu, i, ios
       real(dp) :: z0
@@ -1568,7 +1576,7 @@ end subroutine apply_complex_conjugate
       ! ----------------------------------------------------------
       max_r = -1.0_dp
       do i = 1, Nsites
-         dist = sqrt(site_x(i)**2 + site_y(i)**2)
+         dist = sqrt(siteCorX(i)**2 + siteCorY(i)**2)
          if (dist > max_r) max_r = dist
       end do
 
@@ -1632,9 +1640,12 @@ end subroutine apply_complex_conjugate
       ! Tablas tipo autor (se recortan si n_core_i < 5)
       len_mult = (/0.35_dp, 1.15_dp, 1.8_dp, 3.0_dp, 5.0_dp/)
 
-      ! fh_tab = (/0.5_dp, 0.5_dp, 0.5_dp, 0.3_dp, 0.2_dp/)    !----> refinamiento algo estrecho en y, y cargado en hacia direccion x
-      fh_tab = (/0.3_dp, 0.2_dp, 0.1_dp, 0.05_dp, 0.0_dp/)      !----> caso de refinamiento casi circular en xy plane
-      ! fh_tab = (/0.8_dp, 0.7_dp, 0.5_dp, 0.5_dp, 0.4_dp/)      !----> caso de refinamiento estecho en y y marcado en x
+      !----> refinamiento algo estrecho en y, y cargado en hacia direccion x
+      ! fh_tab = (/0.5_dp, 0.5_dp, 0.5_dp, 0.3_dp, 0.2_dp/)    
+      !----> caso de refinamiento casi circular en xy plane
+      fh_tab = (/0.3_dp, 0.2_dp, 0.1_dp, 0.05_dp, 0.0_dp/)      
+      !----> caso de refinamiento estecho en y y marcado en x
+      ! fh_tab = (/0.8_dp, 0.7_dp, 0.5_dp, 0.5_dp, 0.4_dp/)      
 
       !tierra
       fvp_tab = (/0.3_dp, 0.3_dp, 0.2_dp, 0.1_dp, 0.1_dp/)
@@ -2301,7 +2312,8 @@ end subroutine apply_complex_conjugate
       ! -----------------------------
       call execute_command_line('echo " "')
       call execute_command_line('echo "running tetgen --> Building 2D Mesh including topography"')
-      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly > meshtranTetGen.log 2>&1', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly > meshtranTetGen.log 2>&1',&
+      wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: tetgen execution failed'
       end if
@@ -2317,7 +2329,8 @@ end subroutine apply_complex_conjugate
       ! call execute_command_line('echo " "')
 
       call execute_command_line('cd preprocessing/buildMesh && cp output.1* refinement')
-     call execute_command_line('cd preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', &
+      wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: there is no files content refinement parameters'
 
       ! --------------------------------------------------
@@ -2334,7 +2347,8 @@ end subroutine apply_complex_conjugate
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in makeMtr'
          ! tetgen ... output.$r
-         write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
+         write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', &
+         r, ' >> meshtranRefinementTetGen.log 2>&1'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in tetgen refinement'
 
