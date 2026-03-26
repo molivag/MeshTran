@@ -84,10 +84,10 @@ FRAC_SKIN_DEPTH = 5.55    !No quiero que el tamaño de elemento (o parámetro) s
 ## => Regions Atributes in the model
 ELLIPSES = 9 
 REGIONS = 2
-LOCATION = 1.0 2.0 -39.0 0.0 0.0 39.0 	!xyz xyz
-ID_REGION = 10 20			!reg1 reg2
-RHO_REGIONS = 1.0e9 1.0e2		!rho1 rho2
-REP_PARTITION = -1 9
+LOCATION = 1.0 2.0 -39.0    0.0 0.0 39.0 	  !xyz xyz
+ID_REGION =     10               20	    		!reg1 reg2
+RHO_REGIONS =   1.0e9           1.0e2		    !rho1 rho2
+REP_PARTITION = -1                9
 FIX_RESISTIVITY = 1 0
 
 ## => Refinement for mesh parameter based on spheres
