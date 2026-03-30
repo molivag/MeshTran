@@ -6,8 +6,10 @@
 *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
 MESH_NATURE = native
+THREADS = 18
 
 DEM_FILE = TOTPO_KAL_BBMT_FLAT_475m.xyz
+DEM_LatLon = no 
 DEM_UNITS = kilometers 
 assumming elevation in meters
 
@@ -42,8 +44,8 @@ FMAX = 00
 ## =>  Ellipsoids Surface Mesh
 NUM_ELIPSES = 10
 SITEpadding = 40.0        ! Margen extra sobre el radio de los sites (km)
-FARelemSIZE = 10.0        ! Tamaño máximo de triángulo en el borde (km)
-SURF_RESOLUTION = 2.0     ! len en el centro (km)
+FARelemSIZE = 5.0        ! Tamaño máximo de triángulo en el borde (km)
+SURF_RESOLUTION = 1.5     ! len en el centro (km)
 GROWTH = 2.0              ! Cuánto aumenta 'len' en cada elipse hacia afuera
 
 ## => Meshing for sites at the surface
@@ -61,14 +63,14 @@ HIGH_RESOL_LAYER = 1.6    !thikness of high resolution from surface = HRL*TargDe
 V_PADDING = 2.3           !vertical extension beyond the refinement
 
 
-NEAR_FIELD_RESOL = 6      !min elem size at sites (core_resolution)
-FAR_FIELD_RESOL =  10     !max elem size 
+NEAR_FIELD_RESOL = 4      !min elem size at sites (core_resolution)
+FAR_FIELD_RESOL =  5     !max elem size 
 
 ITER_TET_REFI = 7
 
 !esto controla radio a en makeMTR
-H_PADDING = 30             !horizontal extension beyond last site, a1 = max_distance_site x H_PADDING 
-TARGET_DEPTH = 10
+H_PADDING = 20             !horizontal extension beyond last site, a1 = max_distance_site x H_PADDING 
+TARGET_DEPTH = 15
 
 
 
