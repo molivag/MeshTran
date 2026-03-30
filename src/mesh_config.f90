@@ -5,10 +5,13 @@ module mesh_config
    CHARACTER(len=50),PARAMETER :: outdir ='preprocessing/geometry/'
 
    type :: MeshSettings
+      integer     :: threads = 0    !threads to build mesh
+
 
       ! ----- Archivos -----
-      character(len=150) :: dem_file
-      character(len=50) :: dem_units
+      character(len=100) :: dem_file
+      character(len=20) :: dem_units
+      character(len=20) :: dem_LatLong
       character(len=20) :: mesh_nature
       ! character(len=156) :: outdir
       character(len=100) :: topography_file

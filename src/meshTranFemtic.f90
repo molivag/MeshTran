@@ -12,9 +12,8 @@ program femtic_mesh_driver
 
    ! Control parameters
    character(len=256), allocatable:: edi_files(:), edi_id(:)
-   real(dp), allocatable:: edi_lat(:), edi_lon(:), edi_elev(:)
-   real(dp), allocatable:: site_x_km(:), site_y_km(:), site_z_km(:), dem_x_km(:), dem_y_km(:), dem_z_km(:)
-   real(dp)::  sea_level, x0, y0,z0
+   real(dp), allocatable, dimension(:) :: edi_elev, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km
+   real(dp)::  sea_level, x0, y0, z0
    ! DEM data
    integer:: n_dem, n_edi_files, n_sites
    real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
@@ -31,6 +30,10 @@ program femtic_mesh_driver
    !     Read Digital Elevation Model
    !---------------------------------------------------
    call read_dem(settings, dem_x, dem_y, dem_z, n_dem)
+
+
+   print*, "METROS Esto es DEM in UTM "
+   print'(4(F15.5))', dem_x(1), dem_y(1), dem_z(1), dem_z(1) / 1.0d3
    allocate (dem_x_km(n_dem), dem_y_km(n_dem), dem_z_km(n_dem))
    !Due to elevation in DEM is in mts, then after here the dem_z is in km
 
@@ -39,50 +42,60 @@ program femtic_mesh_driver
    !---------------------------------------------------
    call get_edi_file_list(edi_files, n_edi_files)
    n_sites = n_edi_files
-   allocate (edi_id(n_edi_files), edi_lat(n_edi_files), edi_lon(n_edi_files), edi_elev(n_edi_files))
+   allocate (edi_id(n_edi_files), edi_elev(n_edi_files))
    allocate (site_x(n_edi_files), site_y(n_edi_files), site_z(n_edi_files), fix_elev_site(n_sites))
    ALLOCATE (site_x_km(n_edi_files), site_y_km(n_edi_files), site_z_km(n_edi_files))
 
-   print'(A,f15.5)',"Esto es ----> dem_z:",dem_z(9)
-   !Here it is obtained the coordinates of DEM
-   call read_edi_files(edi_files, n_edi_files, edi_id, edi_lat, edi_lon, edi_elev)
+   print'(A,f15.5)', "Esto es ----> dem_z:", dem_z(9)
+   !Here it is obtained the coordinates of EDIS from raw (LatLong) to UTM km
+   call read_edi_files(edi_files, n_edi_files, edi_id, site_x, site_y, edi_elev)
+   print*, "METROS Esto es coord UTM EDi fIles"
+   print'(4(F15.5))', site_x(1), site_y(1), edi_elev(1), EDI_elev(1) / 1.0d3
 
    !---------------------------------------------------
    !     Convert Lat-Long to UTm
    !---------------------------------------------------
-   !                                                esto deberia llamarse edi_x y edi_y
-   call edi_to_utm_km(edi_lat, edi_lon, n_edi_files, site_x, site_y)
-
    call write_dem_sites_utm(edi_id, site_x, site_y, n_edi_files, dem_x, &
                             dem_y, dem_z, n_dem, site_x_km, site_y_km, dem_x_km, dem_y_km)
 
    dem_x_km = dem_x
    dem_y_km = dem_y
-   dem_z_km = dem_z * 1.0d-3
+   dem_z_km = dem_z*1.0d-3
 
    site_x_km = site_x
    site_y_km = site_y
-   site_z_km = edi_elev * 1.0d-3
+   site_z_km = edi_elev*1.0d-3
 
-   print*, ' '
-   print*, ' '
-   print'(A,f15.5)',"Esto es dem_z:",dem_z(9)
-   print'(A,f15.5)',"Esto es dem_z_km:",site_z_km(9)
-   print*, ' '
-   print*, ' '
+   print *, ' '
+   print *, '  - -  - - - -  -- - - - - - - -  - - - - - - - - - - - - - '
+   print*, "Esto es coord UTM EDi fIles"
+   print'(4(F15.5))', dem_x_km(1), dem_y_km(1), dem_z_km(1), dem_z_km(1) / 1.0d3
+
+   print*, "Esto es DEM in UTM "
+   print'(4(F15.5))', site_x_km(1), site_y_km(1), site_z_km(1), site_z_km(1) / 1.0d3
+   print *, ' ' 
+   print *, '  - -  - - - -  -- - - - - - - -  - - - - - - - - - - - - - '
+
+   print *, ' '
+   print'(A,f15.5)', "Esto es dem_z_km: ", dem_z_km(9)
+   print'(A,f15.5)', "Esto es site_z_km:", site_z_km(9)
+   print *, ' '
+   print *, ' '
+
+   stop
    !---------------------------------------------------
    !     Compute anchor point (central point) of analysis domain based on sites locations
    !---------------------------------------------------
    call compute_center(site_x_km, site_y_km, site_z_km, n_edi_files, x0, y0, z0)
-   print'(A,f15.5)', "this is x0: ",x0
-   print'(A,f15.5)', "this is y0: ",y0
-   print'(A,f15.5)', "this is z0: ",z0
+   print'(A,f15.5)', "this is x0: ", x0
+   print'(A,f15.5)', "this is y0: ", y0
+   print'(A,f15.5)', "this is z0: ", z0
    !---------------------------------------------------
    !     Recenter
    !---------------------------------------------------
    call recenter_all(n_edi_files, n_dem, x0, y0, z0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
-   print*, dem_x_km(9)
-   print*, dem_z_km(9)
+   print *, dem_x_km(9)
+   print *, dem_z_km(9)
    !a parti de aqui coordenadas de malla
    print'(A,f15.5)', "Esto es dem_z_km despues de recenter: ", dem_z_km(2)
    print'(A,f15.5)', "Esto es siteCord_z despues de recenter: ", site_z_km(2)
@@ -158,8 +171,17 @@ contains
          case ('MESH_NATURE')
             OBJsettings%mesh_nature = trim(val)
 
+         case ('THREADS')
+            read (val, *) OBJsettings%threads
+
          case ('DEM_FILE')
             OBJsettings%dem_file = trim(val)
+
+         case ('DEM_UNITS')
+            OBJsettings%dem_units = trim(val)
+
+         case ('DEM_LatLon')
+            OBJsettings%dem_LatLong = trim(val)
 
          case ('TOPO_FILE')
             OBJsettings%topography_file = trim(val)
@@ -169,9 +191,6 @@ contains
 
          case ('COSLI_FILE')
             OBJsettings%coastLine_file = trim(val)
-
-         case ('DEM_UNITS')
-            OBJsettings%dem_units = trim(val)
 
          case ('SEA_LEVEL')
             read (val, *) OBJsettings%sea_level
@@ -221,9 +240,9 @@ contains
          case ('minEDGES')
             read (val, *) OBJparamRefi%minEDGE
 
-         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = 
-         ! = = = = To build the surface mesh (cascaroin) = = = = = = = = = = 
-         ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+            ! = = = = To build the surface mesh (cascaroin) = = = = = = = = = =
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
          case ('SITEpadding')
             read (val, *) OBJparamRefi%paddingRefi
 
@@ -370,7 +389,7 @@ contains
       character(len=512) :: line
 
       ! Arrays dinámicos para los datos de cada estación
-      real(dp), allocatable :: freq(:), zr(:, :), zi(:, :), zvar(:,:), zerr(:, :), sdSI(:,:)
+      real(dp), allocatable :: freq(:), zr(:, :), zi(:, :), zvar(:, :), zerr(:, :), sdSI(:, :)
       ! El tensor Z en EDI se lee por componentes: XX, XY, YX, YY
       ! Usaremos un array zr(nf, 4) donde 1=XX, 2=XY, 3=YX, 4=YY
       logical :: ex1
@@ -378,7 +397,7 @@ contains
 
       ! Variables de control (Estas vendrían de tu archivo de conf)
       integer :: subsampling_mode
-      real(dp) :: fmin,noise_floor
+      real(dp) :: fmin, noise_floor
       real(dp) :: fmax
 
       noise_floor = 1.0d-15 ! Epsilon de seguridad para evitar división por cero
@@ -411,7 +430,7 @@ contains
          end if
 
          ! Dimensionar vectores para esta estación específica
-         allocate (freq(nf), zr(nf, 4), zi(nf, 4), zerr(nf, 4), zvar(nf, 4), sdSI(nf,4))
+         allocate (freq(nf), zr(nf, 4), zi(nf, 4), zerr(nf, 4), zvar(nf, 4), sdSI(nf, 4))
          allocate (mask(nf))
 
          ! 3. Leer Frecuencias (>FREQ)
@@ -435,13 +454,12 @@ contains
          call read_edi_block(unit_in, '>ZYYI', nf, zi(:, 4))
          call read_edi_block(unit_in, '>ZYY.VAR', nf, zvar(:, 4))
 
-
          ! --- TRANSFORMACIONES CRÍTICAS ---
          ! 5. Convertir a unidades SI (V/m / A/m)
          call convert_EDI_file_units(nf, zvar, zr, zi, sdSI)
-         
-         ! 6. Apply conjugate to accomplish FEMTIC time dependence exp(-iωt) 
-         call apply_complex_conjugate(nf,zi)
+
+         ! 6. Apply conjugate to accomplish FEMTIC time dependence exp(-iωt)
+         call apply_complex_conjugate(nf, zi)
          ! 6. Calcular Error Floor (basado en el 5% y 20%)
          call apply_error_floor(nf, zr, zi, sdSI, zerr)
          ! ---------------------------------
@@ -493,7 +511,7 @@ contains
          close (unit_in)
 
       end do
-      write(unit_out, '(A)') 'END'
+      write (unit_out, '(A)') 'END'
 
       close (unit_out)
       inquire (file='computing/observe.dat', exist=ex1)
@@ -509,44 +527,44 @@ contains
 !=========================================================
 !=======
 !=========================================================
-subroutine apply_complex_conjugate(nf, zi)
-    implicit none
-    integer, intent(in) :: nf
-    real(dp), intent(inout) :: zi(nf, 4)
-    
-    ! Multiplicación por -1 de la parte imaginaria
-    ! Esto rota la fase de +45 (EDI) a -45 (FEMTIC)
-    zi = -1.0d0 * zi
-end subroutine apply_complex_conjugate
+   subroutine apply_complex_conjugate(nf, zi)
+      implicit none
+      integer, intent(in) :: nf
+      real(dp), intent(inout) :: zi(nf, 4)
+
+      ! Multiplicación por -1 de la parte imaginaria
+      ! Esto rota la fase de +45 (EDI) a -45 (FEMTIC)
+      zi = -1.0d0*zi
+   end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
    subroutine convert_EDI_file_units(nf, zvar, zr, zi, sdSI)
-      real(dp), parameter :: PI = 4 * atan(1.0_16)
+      real(dp), parameter :: PI = 4*atan(1.0_16)
       integer, intent(in) :: nf
       real(dp), intent(inout) :: zr(nf, 4), zi(nf, 4)
-      real(dp), intent(inout) :: zvar(nf,4)
-      real(dp), INTENT(OUT) :: sdSI(nf,4)
-      real(dp) :: mu0, scale_factor, sd_sigma(nf,4)
+      real(dp), intent(inout) :: zvar(nf, 4)
+      real(dp), INTENT(OUT) :: sdSI(nf, 4)
+      real(dp) :: mu0, scale_factor, sd_sigma(nf, 4)
 
       sd_sigma = sqrt(zvar)
 
-      mu0 = 4.0d0 * PI * 1.0E-7 
-      scale_factor = mu0 * 1.0E3  ! De mV/km/nT a V/m / A/m
+      mu0 = 4.0d0*PI*1.0E-7
+      scale_factor = mu0*1.0E3  ! De mV/km/nT a V/m / A/m
 
-      zr = zr * scale_factor
-      zi = zi * scale_factor
-      sdSI = sd_sigma * scale_factor
+      zr = zr*scale_factor
+      zi = zi*scale_factor
+      sdSI = sd_sigma*scale_factor
 
    end subroutine convert_EDI_file_units
 !=========================================================
 !=======
 !=========================================================
    subroutine apply_error_floor(nf, zr, zi, SD, zerr)
-      integer,   intent(in) :: nf
-      real(dp),  intent(in) :: zr(nf, 4), zi(nf, 4), SD(nf,4)
+      integer, intent(in) :: nf
+      real(dp), intent(in) :: zr(nf, 4), zi(nf, 4), SD(nf, 4)
       real(dp)              :: amp_xy, amp_yx, amp_ref
-      real(dp),  intent(out) :: zerr(nf, 4)
+      real(dp), intent(out) :: zerr(nf, 4)
       integer  :: j
 
       do j = 1, nf
@@ -555,13 +573,13 @@ end subroutine apply_complex_conjugate
          amp_yx = sqrt(zr(j, 3)**2 + zi(j, 3)**2)
 
          ! 2. Media geométrica de las amplitudes principales
-         amp_ref = sqrt(amp_xy * amp_yx)
+         amp_ref = sqrt(amp_xy*amp_yx)
 
          ! Aplicamos los porcentajes de acuerdo al manual/femticPy
-         zerr(j, 1) = max(SD(j,1), amp_ref * 0.20d0)  ! INdiag  ZXX (20%)
-         zerr(j, 2) = max(SD(j,2), amp_ref * 0.05d0)  ! OFFdiag ZXY (5%)
-         zerr(j, 3) = max(SD(j,3), amp_ref * 0.20d0)  ! OFFdiag ZYX (5%)
-         zerr(j, 4) = max(SD(j,4), amp_ref * 0.05d0)  ! INdiag  ZYY (20%)
+         zerr(j, 1) = max(SD(j, 1), amp_ref*0.20d0)  ! INdiag  ZXX (20%)
+         zerr(j, 2) = max(SD(j, 2), amp_ref*0.05d0)  ! OFFdiag ZXY (5%)
+         zerr(j, 3) = max(SD(j, 3), amp_ref*0.20d0)  ! OFFdiag ZYX (5%)
+         zerr(j, 4) = max(SD(j, 4), amp_ref*0.05d0)  ! INdiag  ZYY (20%)
       end do
    end subroutine apply_error_floor
 !=========================================================
@@ -616,7 +634,7 @@ end subroutine apply_complex_conjugate
       write (iu, '(F3.1)') OBJparamRefi%rotation
 
       write (iu, 101) 'NUM_THREADS'
-      write (iu, '(I0)') 8
+      write (iu, '(I0)') OBJsettings%threads
 
       write (iu, 101) 'SURF_MESH'
       write (iu, 101) 'ELLIPSOIDS'
@@ -759,36 +777,78 @@ end subroutine apply_complex_conjugate
       use mesh_config
       implicit none
 
-      type(MeshSettings), intent(in) :: OBJsettings
-      real(dp), allocatable, intent(out):: x(:), y(:), z(:)
-      integer, intent(out):: n
+      type(MeshSettings), intent(in)      :: OBJsettings
+      real(dp), allocatable, intent(out)  :: x(:), y(:), z(:)
+      integer, intent(out)                :: n
+      integer                            :: iu, i
+      real(dp)                           :: xx, yy, zz, longg, latt, elevv
+      real(dp), ALLOCATABLE              :: east_km(:), north_km(:)
+      real(dp), ALLOCATABLE              :: long(:), lat(:), elev(:)
+      real(dp)                           :: scale
 
-      integer:: iu, i
-      real(dp):: xx, yy, zz
-      real(dp):: scale
+      select case (OBJsettings%dem_LatLong)
+      case ("yes")
+         open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
+         n = 0
+         do
+            read (iu, *, end=10)
+            n = n + 1
+         end do
+10       rewind (iu)
 
-      scale = 1.0_dp
-      if (OBJsettings%dem_units == 'meters') scale = 1.0d-3
+         allocate (long(n), lat(n), elev(n))
+         do i = 1, n
+            read (iu, *) longg, latt, elevv
 
-      open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
-      n = 0
-      do
-         read (iu, *, end=10)
-         n = n + 1
-      end do
-10    rewind (iu)
+            long(i) = longg 
+            lat(i)  = latt 
+            elev(i) = elevv
+         end do
 
-      allocate (x(n), y(n), z(n))
-      do i = 1, n
-         read (iu, *) xx, yy, zz
-         ! x(i) = xx*scale
-         ! y(i) = yy*scale
-         x(i) = yy*scale   ! North → X ; applying MT convention
-         y(i) = xx*scale   ! East  → Y ; applying MT convention
-         z(i) = zz*scale 
-      end do
-      close (iu)
-   end subroutine
+         close (iu)
+
+         call lat_long_to_UTM_km(lat, long, n, east_km, north_km)
+      
+         allocate (x(n), y(n), z(n))
+         !here we set the convention of north pointing to north
+         x = north_km
+         y = east_km
+         z = elev * 1.0d-3
+
+         print*, "Esto es              X               Y               Z"
+         print'(A12, 3(f15.5))'," ", x(1),y(1),z(1)
+      stop
+
+
+      case ("no")
+         scale = 1.0_dp
+         if (OBJsettings%dem_units == 'meters') scale = 1.0d-3
+
+         open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
+         n = 0
+         do
+            read (iu, *, end=20)
+            n = n + 1
+         end do
+20       rewind (iu)
+
+         allocate (x(n), y(n), z(n))
+         do i = 1, n
+            read (iu, *) xx, yy, zz
+            ! x(i) = xx*scale
+            ! y(i) = yy*scale
+            x(i) = yy*scale   ! North → X ; applying MT convention
+            y(i) = xx*scale   ! East  → Y ; applying MT convention
+            z(i) = zz*scale
+         end do
+
+         close (iu)
+
+      case default
+
+      end select
+
+   end subroutine read_dem
 !=========================================================
 !=======
 !=========================================================
@@ -972,16 +1032,17 @@ end subroutine apply_complex_conjugate
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_edi_files(EDIfiles, n, EDIid, EDIlat, EDIlong, EDIelev)
+   subroutine read_edi_files(EDIfiles, n, EDIid, EDIcoordX, EDIcoordY, EDIelev)
       implicit none
 
-      integer, intent(in):: n
+      integer,          intent(in)     :: n
       character(len=*), intent(in)     :: EDIfiles(n)
-      real(dp), intent(out)            :: EDIlat(n), EDIlong(n), EDIelev(n)
       character(len=*), intent(out)    :: EDIid(n)
-
-      integer:: i, unit, ios, p1, p2
-      character(len=512):: line
+      real(dp),         intent(out)    :: EDIcoordX(n), EDIcoordY(n), EDIelev(n)
+      real(dp)                         :: EDIlat(n), EDIlong(n)
+      real(dp), allocatable, dimension(:)  :: east_km, north_km
+      integer                          :: i, unit, ios, p1, p2
+      character(len=512)               :: line
 
       logical:: found_id, found_lat, found_lon, found_elev
 
@@ -1031,19 +1092,30 @@ end subroutine apply_complex_conjugate
          end if
       end do
 
+      call lat_long_to_UTM_km(EDIlat, EDIlong, n, east_km, north_km)
+
+      !here we set the convention of north pointing to north
+      EDIcoordX = north_km
+      EDIcoordY = east_km
+
+
+
    end subroutine read_edi_files
 
 !=========================================================
 !=======
-!=========================================================
-   subroutine edi_to_utm_km(lat, lon, n_files, x, y)
+!=========================================================trendline
+   subroutine lat_long_to_UTM_km(lat, lon, n_points, east_km, north_km)
+      ! subroutine lat_long_to_UTM_km(lat, lon, n_points, x, y)
       implicit none
-      integer, intent(in)  :: n_files
-      real(dp), intent(in)  :: lat(n_files), lon(n_files)      ! grados decimales
-      real(dp), intent(out) :: x(n_files), y(n_files)           ! metros
+      integer, intent(in)     :: n_points
+      real(dp), intent(in)    :: lat(n_points), lon(n_points)             ! grados decimales
+      ! real(dp), intent(out)   :: east_km(n_points), north_km(n_points)    ! ya en kilometros
+      real(dp), allocatable, intent(out)   :: east_km(:), north_km(:)    ! ya en kilometros
 
       integer:: i, zone
-      real(dp):: lon_mean, east_km(n_files), north_km(n_files)
+      real(dp)               :: x(n_points), y(n_points)                 ! metros
+      real(dp):: lon_mean
 
       ! --- constantes---
       real(dp), parameter:: semieje = 6378137.0d0
@@ -1052,8 +1124,8 @@ end subroutine apply_complex_conjugate
       real(dp), parameter:: pi = 3.141592653589793d0
 
       real(dp):: e2, ep2
-      real(dp):: latr(n_files), lonr(n_files), lon0r
-      real(dp):: N(n_files), T(n_files), C(n_files), A(n_files), M(n_files)
+      real(dp):: latr(n_points), lonr(n_points), lon0r
+      real(dp):: N(n_points), T(n_points), C(n_points), A(n_points), M(n_points)
       real(dp):: lon0
 
       ! --- elipsoide---
@@ -1061,11 +1133,11 @@ end subroutine apply_complex_conjugate
       ep2 = e2/(1.0d0 - e2)
 
       ! --- zona UTM---
-      lon_mean = sum(lon)/dble(n_files)
+      lon_mean = sum(lon)/dble(n_points)
       zone = int((lon_mean + 180.0d0)/6.0d0) + 1
       lon0 = (zone - 1)*6.0d0 - 180.0d0 + 3.0d0
 
-      do i = 1, n_files
+      do i = 1, n_points
          ! --- radianes---
          latr(i) = lat(i)*pi/180.0d0
          lonr(i) = lon(i)*pi/180.0d0
@@ -1092,20 +1164,23 @@ end subroutine apply_complex_conjugate
                                               + (61.0d0 - 58.0d0*T(i) + T(i)**2 + 600.0d0*C(i) - 330.0d0*ep2)*A(i)**6/720.0d0))
 
          ! hemisferio sur
+         !to avoind negative coordinates in northing
          if (lat(i) < 0.0d0) y(i) = y(i) + 10000000.0d0
       end do
 
       !Covierto UTM en metros a UTM en kilometros
       ! x = x/1000.0d0
       ! y = y/1000.0d0
-      !
-      east_km = x/1000.0d0
-      north_km = y/1000.0d0
+      ALLOCATE(east_km(n_points), north_km(n_points))
 
-      x = north_km   ! X = Norte
-      y = east_km    ! Y = Este
+      north_km = y/1000.0d0    ! Y = Norte
+      east_km = x/1000.0d0    ! X = Este
 
-   end subroutine edi_to_utm_km
+      !Lo ideal es que esta conversion se haga fuera e la rutina, al igual en read_dem o read_EDIs
+      ! x = north_km   ! X = Norte
+      ! y = east_km    ! Y = Este
+
+   end subroutine lat_long_to_UTM_km
 !=========================================================
 !=======
 !=========================================================
@@ -1126,7 +1201,7 @@ end subroutine apply_complex_conjugate
       integer, intent(in)    :: Nsites, nDEM
       real(dp), intent(in)    :: xCenter, yCenter, zCenter
       real(dp), intent(inout):: siteCord_x(Nsites), siteCord_y(Nsites), siteCord_z(Nsites)
-      real(dp), intent(inout):: demX(nDEM), demY(nDEM),demZ(nDEM)
+      real(dp), intent(inout):: demX(nDEM), demY(nDEM), demZ(nDEM)
       integer :: i
 
       siteCord_x(:) = siteCord_x(:) - xCenter
@@ -1137,9 +1212,9 @@ end subroutine apply_complex_conjugate
       demY(:) = demY(:) - yCenter
       demZ(:) = demZ(:) - zCenter
 
-      do i =1,nDEM
+      do i = 1, nDEM
          if (abs(demZ(i)) < 1.0d-15) demZ(i) = 0.0d0
-      enddo
+      end do
    end subroutine
 !=========================================================
 !=======
@@ -1641,11 +1716,11 @@ end subroutine apply_complex_conjugate
       len_mult = (/0.35_dp, 1.15_dp, 1.8_dp, 3.0_dp, 5.0_dp/)
 
       !----> refinamiento algo estrecho en y, y cargado en hacia direccion x
-      ! fh_tab = (/0.5_dp, 0.5_dp, 0.5_dp, 0.3_dp, 0.2_dp/)    
+      ! fh_tab = (/0.5_dp, 0.5_dp, 0.5_dp, 0.3_dp, 0.2_dp/)
       !----> caso de refinamiento casi circular en xy plane
-      fh_tab = (/0.3_dp, 0.2_dp, 0.1_dp, 0.05_dp, 0.0_dp/)      
+      fh_tab = (/0.3_dp, 0.2_dp, 0.1_dp, 0.05_dp, 0.0_dp/)
       !----> caso de refinamiento estecho en y y marcado en x
-      ! fh_tab = (/0.8_dp, 0.7_dp, 0.5_dp, 0.5_dp, 0.4_dp/)      
+      ! fh_tab = (/0.8_dp, 0.7_dp, 0.5_dp, 0.5_dp, 0.4_dp/)
 
       !tierra
       fvp_tab = (/0.3_dp, 0.3_dp, 0.2_dp, 0.1_dp, 0.1_dp/)
@@ -1695,7 +1770,7 @@ end subroutine apply_complex_conjugate
             len_i = min(cfg%core_resolution*len_mult(i), max_elem_size)
 
             fh = fh_tab(i)
-            fvp = fvp_tab(i)*1.6
+            fvp = fvp_tab(i)*1.8
             fvm = fvm_tab(i)
 
          else if (i <= n_core_i + n_trans_i) then
@@ -2136,6 +2211,8 @@ end subroutine apply_complex_conjugate
       select case (check)
       case ("native")
          print *, "No mesh convertion, building native mesh"
+         print *, '  - -  - - - -  -- - - - - - - -  - - - - - - - - - - - - - '
+         print *, ' ' 
 
       case ("external")
 
@@ -2312,8 +2389,8 @@ end subroutine apply_complex_conjugate
       ! -----------------------------
       call execute_command_line('echo " "')
       call execute_command_line('echo "running tetgen --> Building 2D Mesh including topography"')
-      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly > meshtranTetGen.log 2>&1',&
-      wait=.true., exitstat=stat)
+      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly > meshtranTetGen.log 2>&1', &
+                                wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: tetgen execution failed'
       end if
@@ -2330,7 +2407,7 @@ end subroutine apply_complex_conjugate
 
       call execute_command_line('cd preprocessing/buildMesh && cp output.1* refinement')
       call execute_command_line('cd preprocessing/buildMesh && cp makeMtr.param obs_site.dat refinement', &
-      wait=.true., exitstat=stat)
+                                wait=.true., exitstat=stat)
       if (stat /= 0) stop 'ERROR: there is no files content refinement parameters'
 
       ! --------------------------------------------------
@@ -2348,7 +2425,7 @@ end subroutine apply_complex_conjugate
          if (stat /= 0) error stop 'ERROR in makeMtr'
          ! tetgen ... output.$r
          write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq3.0/0 output.', &
-         r, ' >> meshtranRefinementTetGen.log 2>&1'
+            r, ' >> meshtranRefinementTetGen.log 2>&1'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in tetgen refinement'
 
