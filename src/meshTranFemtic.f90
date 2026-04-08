@@ -82,7 +82,6 @@ program femtic_mesh_driver
    print *, ' '
    print *, ' '
 
-   stop
    !---------------------------------------------------
    !     Compute anchor point (central point) of analysis domain based on sites locations
    !---------------------------------------------------
@@ -101,7 +100,8 @@ program femtic_mesh_driver
    print'(A,f15.5)', "Esto es siteCord_z despues de recenter: ", site_z_km(2)
    call snap_sites_to_dem(edi_id, site_x_km, site_y_km, n_sites, dem_x, dem_y, dem_z_km, n_dem, fix_elev_site)
    print'(A,f15.5)', "Esto es despues de snap_sites: ", fix_elev_site(2)
-   call check_domain(dem_x_km, dem_y_km, settings)
+   ! call check_domain(dem_x_km, dem_y_km, settings)
+   call check_domain(dem_x_km, dem_y_km, dem_z_km,  n_dem, settings)
 
    ! !Write files in mesh coordinates centered at anchor point
    call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
@@ -114,9 +114,9 @@ program femtic_mesh_driver
    call control_mesh(x0, y0, site_x_km, site_y_km, n_edi_files, settings, paramRefi)
    call write_makeMtr_param(0.0d0, 0.0d0, site_x_km, site_y_km, n_edi_files, paramRefi, globRefi)
    call write_obs_sites(site_x_km, site_y_km, fix_elev_site, n_edi_files, paramRefi)
-
    call resistivitty_attribute(n_sites, site_x_km, site_y_km, fix_elev_site, settings, globRefi, regions)
 
+   ! stop
    call run_makeTetraMesh_and_assign_regions(regions)
    call run_TETGEN_and_refine_mesh(globRefi)
    call run_TetGen2Femtic(settings, globRefi)
@@ -852,13 +852,65 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine check_domain(x, y, OBJsettings)!xmin, xmax, ymin, ymax, pad_x, pad_y)
+   ! subroutine check_domain(x, y, OBJsettings)!xmin, xmax, ymin, ymax, pad_x, pad_y)
+   !    implicit none
+   !    type(MeshSettings), INTENT(IN) :: OBJsettings
+   !    real(dp), intent(in):: x(:), y(:)
+   !    ! real(dp), intent(in):: xmin, xmax, ymin, ymax, pad_x, pad_y
+   !    real(dp)            :: xminDEM, yminDEM, xmaxDEM, ymaxDEM, dem_size_x, dem_size_y
+   !    real(dp)            :: condition_1, condition_2, condition_3, condition_4, x1, x2, y1, y2
+   !
+   !    xminDEM = minval(x)
+   !    xmaxDEM = maxval(x)
+   !    yminDEM = minval(y)
+   !    ymaxDEM = maxval(y)
+   !    dem_size_x = xmaxDEM - xminDEM
+   !    dem_size_y = ymaxDEM - yminDEM
+   !
+   !    x1 = OBJsettings%xminDOM - OBJsettings%pad_x
+   !    x2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
+   !    y1 = OBJsettings%yminDOM - OBJsettings%pad_y
+   !    y2 = OBJsettings%ymaxDOM + OBJsettings%pad_y
+   !
+   !    print *, 'DEM X range      :', xminDEM, xmaxDEM
+   !    print *, 'DEM Y range      :', yminDEM, ymaxDEM
+   !    print *, 'Domain X (+pad)  :', x1, x2
+   !    print *, 'Domain Y (+pad)  :', y1, y2
+   !    print *, 'DEM size (km)    :', dem_size_x, dem_size_y
+   !
+   !    condition_1 = OBJsettings%xminDOM - OBJsettings%pad_x
+   !    condition_2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
+   !    condition_3 = OBJsettings%yminDOM - OBJsettings%pad_y
+   !    condition_4 = OBJsettings%ymaxDOM + OBJsettings%pad_y
+   !
+   !    if (minval(x) > condition_1 .or. maxval(x) < condition_2) stop 'DEM X does not cover domain+padding'
+   !    if (minval(y) > condition_3 .or. maxval(y) < condition_4) stop 'DEM Y does not cover domain+padding'
+   ! end subroutine
+
+
+!
+subroutine check_domain(x, y, z, n, OBJsettings)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
-      real(dp), intent(in):: x(:), y(:)
-      ! real(dp), intent(in):: xmin, xmax, ymin, ymax, pad_x, pad_y
-      real(dp)            :: xminDEM, yminDEM, xmaxDEM, ymaxDEM, dem_size_x, dem_size_y
-      real(dp)            :: condition_1, condition_2, condition_3, condition_4, x1, x2, y1, y2
+      real(dp)                       :: dem_size_x, dem_size_y
+      real(dp), allocatable, intent(inout):: x(:), y(:), z(:)
+      integer, intent(inout)               :: n
+
+      real(dp) :: xminDEM, xmaxDEM, yminDEM, ymaxDEM
+      real(dp) :: x_ext, y_ext, x1, x2, y1, y2
+      real(dp), allocatable :: x_tmp(:), y_tmp(:), z_tmp(:)
+      integer  :: i, j, k, nx_pad, ny_pad, n_total
+
+      ! 1. Guardamos límites del DEM real
+      xminDEM = minval(x); xmaxDEM = maxval(x)
+      yminDEM = minval(y); ymaxDEM = maxval(y)
+
+      ! 2. Definimos el dominio TOTAL con padding (Marco rojo)
+      x1 = OBJsettings%xminDOM - OBJsettings%pad_x
+      x2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
+      y1 = OBJsettings%yminDOM - OBJsettings%pad_y
+      y2 = OBJsettings%ymaxDOM + OBJsettings%pad_y
+
 
       xminDEM = minval(x)
       xmaxDEM = maxval(x)
@@ -867,25 +919,72 @@ contains
       dem_size_x = xmaxDEM - xminDEM
       dem_size_y = ymaxDEM - yminDEM
 
-      x1 = OBJsettings%xminDOM - OBJsettings%pad_x
-      x2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
-      y1 = OBJsettings%yminDOM - OBJsettings%pad_y
-      y2 = OBJsettings%ymaxDOM + OBJsettings%pad_y
-
       print *, 'DEM X range      :', xminDEM, xmaxDEM
       print *, 'DEM Y range      :', yminDEM, ymaxDEM
       print *, 'Domain X (+pad)  :', x1, x2
       print *, 'Domain Y (+pad)  :', y1, y2
       print *, 'DEM size (km)    :', dem_size_x, dem_size_y
 
-      condition_1 = OBJsettings%xminDOM - OBJsettings%pad_x
-      condition_2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
-      condition_3 = OBJsettings%yminDOM - OBJsettings%pad_y
-      condition_4 = OBJsettings%ymaxDOM + OBJsettings%pad_y
+      ! 3. Vamos a crear una rejilla de padding (ej. cada 5km) 
+      ! para rellenar el hueco blanco
+      nx_pad = 80 ! Puntos en X
+      ny_pad = 80 ! Puntos en Y
+      n_total = n + (nx_pad * ny_pad)
 
-      if (minval(x) > condition_1 .or. maxval(x) < condition_2) stop 'DEM X does not cover domain+padding'
-      if (minval(y) > condition_3 .or. maxval(y) < condition_4) stop 'DEM Y does not cover domain+padding'
+      allocate(x_tmp(n_total), y_tmp(n_total), z_tmp(n_total))
+
+      ! Copiamos los puntos reales del DEM primero
+      x_tmp(1:n) = x
+      y_tmp(1:n) = y
+      z_tmp(1:n) = z
+
+      ! 4. AÑADIMOS PUNTOS EXTRA Y USAMOS EL "IF"
+      k = n
+      do i = 1, nx_pad
+         x_ext = x1 + (i-1)*(x2-x1)/(nx_pad-1)
+         do j = 1, ny_pad
+            y_ext = y1 + (j-1)*(y2-y1)/(ny_pad-1)
+
+            ! AQUÍ ESTÁ TU IF:
+            ! Si el punto que estamos creando cae FUERA del DEM real...
+            if (x_ext < xminDEM .or. x_ext > xmaxDEM .or. &
+                y_ext < yminDEM .or. y_ext > ymaxDEM) then
+
+               print*,'Cae fuera'
+                k = k + 1
+                x_tmp(k) = x_ext
+                y_tmp(k) = y_ext
+                z_tmp(k) = 0.0_dp  ! <--- ELEVACIÓN ARTIFICIAL (Padding)
+            end if
+         end do
+      end do
+
+      ! 5. Actualizamos los vectores originales con el nuevo tamaño
+      call move_alloc(x_tmp, x)
+      call move_alloc(y_tmp, y)
+      call move_alloc(z_tmp, z)
+      n = k  ! El nuevo número total de puntos
+
    end subroutine
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 !=========================================================
 !=======
 !=========================================================
@@ -1372,18 +1471,23 @@ contains
    subroutine define_analysis_domain(OBJsettings)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
+      real(dp) :: xmin, ymin, xmax, ymax
 
       integer:: iu
 
-      ! xmin =  - pad_x
-      ! xmax = maxval(x) + pad_x
-      ! ymin = minval(y) - pad_y
-      ! ymax = maxval(y) + pad_y
+      ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
+      ! xmax = OBJsettings%xmaxDOM + OBJsettings%pad_x
+      ! ymin = OBJsettings%yminDOM - OBJsettings%pad_y
+      ! ymax = OBJsettings%ymaxDOM + OBJsettings%pad_y
 
       open (newunit=iu, file=trim(outdir)//"analysis_domain.dat", status='replace', action='write')
       write (iu, '(2F10.2)') OBJsettings%xminDOM, OBJsettings%xmaxDOM
       write (iu, '(2F10.2)') OBJsettings%yminDOM, OBJsettings%ymaxDOM
       write (iu, '(2F10.2)') OBJsettings%zminDOM, OBJsettings%zmaxDOM
+
+      ! write (iu, '(2F10.2)') xmin, xmax
+      ! write (iu, '(2F10.2)') ymin, ymax 
+      ! write (iu, '(2F10.2)') OBJsettings%zminDOM, OBJsettings%zmaxDOM
       close (iu)
 
    end subroutine
@@ -1454,6 +1558,11 @@ contains
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
       integer:: iu
+
+      ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
+      ! xmax = OBJsettings%xmaxDOM + OBJsettings%pad_x
+      ! ymin = OBJsettings%yminDOM - OBJsettings%pad_y
+      ! ymax = OBJsettings%ymaxDOM + OBJsettings%pad_y
 
       if (.not. OBJsettings%has_sea) then
          open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')

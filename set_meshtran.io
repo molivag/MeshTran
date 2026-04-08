@@ -17,15 +17,15 @@ TOPO_FILE = topography_for.dat
 BATHY_FILE = bathymetry_for.dat
 COSLI_FILE = coast_line.dat
 
-XMIN_DOM = -40.0
-XMAX_DOM =  40.0
-YMIN_DOM = -50.0
-YMAX_DOM =  50.0
+XMIN_DOM = -80.0
+XMAX_DOM =  80.0
+YMIN_DOM = -80.0
+YMAX_DOM =  80.0
 ZMIN_DOM = -50.0
 ZMAX_DOM =  50.0
 
-PAD_X = 10.0
-PAD_Y = 10.0
+PAD_X = 50.0
+PAD_Y = 50.0
 
 HAS_SEA = NO
 SEA_LEVEL = 0.0
@@ -44,7 +44,7 @@ FMAX = 00
 ## =>  Ellipsoids Surface Mesh
 NUM_ELIPSES = 10
 SITEpadding = 40.0        ! Margen extra sobre el radio de los sites (km)
-FARelemSIZE = 5.0        ! Tamaño máximo de triángulo en el borde (km)
+FARelemSIZE = 25.0        ! Tamaño máximo de triángulo en el borde (km)
 SURF_RESOLUTION = 1.5     ! len en el centro (km)
 GROWTH = 2.0              ! Cuánto aumenta 'len' en cada elipse hacia afuera
 
@@ -66,7 +66,7 @@ V_PADDING = 2.3           !vertical extension beyond the refinement
 NEAR_FIELD_RESOL = 4      !min elem size at sites (core_resolution)
 FAR_FIELD_RESOL =  5     !max elem size 
 
-ITER_TET_REFI = 7
+ITER_TET_REFI = 6
 
 !esto controla radio a en makeMTR
 H_PADDING = 20             !horizontal extension beyond last site, a1 = max_distance_site x H_PADDING 
