@@ -15,7 +15,7 @@ program femtic_mesh_driver
    real(dp), allocatable, dimension(:) :: edi_elev, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km
    real(dp)::  sea_level, x0, y0, z0
    ! DEM data
-   integer:: n_dem, n_edi_files, n_sites
+   integer:: n_dem, n_edi_files, n_sites, i
    real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
 
    !---------------------------------------------------
@@ -43,7 +43,8 @@ program femtic_mesh_driver
    call get_edi_file_list(edi_files, n_edi_files)
    n_sites = n_edi_files
    allocate (edi_id(n_edi_files), edi_elev(n_edi_files))
-   allocate (site_x(n_edi_files), site_y(n_edi_files), site_z(n_edi_files), fix_elev_site(n_sites))
+   ! allocate (site_x(n_edi_files), site_y(n_edi_files), site_z(n_edi_files), fix_elev_site(n_sites))
+   allocate (site_x(n_edi_files), site_y(n_edi_files), site_z(n_edi_files))
    ALLOCATE (site_x_km(n_edi_files), site_y_km(n_edi_files), site_z_km(n_edi_files))
 
    print'(A,f15.5)', "Esto es ----> dem_z:", dem_z(9)
@@ -93,13 +94,13 @@ program femtic_mesh_driver
    !     Recenter
    !---------------------------------------------------
    call recenter_all(n_edi_files, n_dem, x0, y0, z0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
-   print *, dem_x_km(9)
-   print *, dem_z_km(9)
+
    !a parti de aqui coordenadas de malla
-   print'(A,f15.5)', "Esto es dem_z_km despues de recenter: ", dem_z_km(2)
-   print'(A,f15.5)', "Esto es siteCord_z despues de recenter: ", site_z_km(2)
-   call snap_sites_to_dem(edi_id, site_x_km, site_y_km, n_sites, dem_x, dem_y, dem_z_km, n_dem, fix_elev_site)
-   print'(A,f15.5)', "Esto es despues de snap_sites: ", fix_elev_site(2)
+   ! print'(A,f15.5)', "Esto es siteCord_z despues de recenter: ", site_z_km(2)
+   print*,' '
+   ! call snap_sites_to_dem(site_x_km, site_y_km, site_z_km, n_sites, dem_x, dem_y, dem_z_km, n_dem, fix_elev_site)
+   ! print'(A,f15.5)', "Esto es despues de snap_sites: ", fix_elev_site(2)
+   print*,' '
    ! call check_domain(dem_x_km, dem_y_km, settings)
    call check_domain(dem_x_km, dem_y_km, dem_z_km,  n_dem, settings)
 
@@ -108,15 +109,26 @@ program femtic_mesh_driver
    call define_analysis_domain(settings)
 
    call write_topography(settings, dem_x_km, dem_y_km, dem_z_km, n_dem)
-   call write_bathymetry(settings, dem_x_km, dem_y_km, dem_x_km, n_dem)
+   call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z_km, n_dem)
    call write_coast_line(settings)
-   call write_observing_sites(site_x_km, site_y_km, n_edi_files, paramRefi)
+
+   print*,' '
+   print*,' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
+   ! print*, '        site_z_km                      fix_elev_site'
+   print*, 'Desde main      esto es  site_z_km                      '
+   do i=1,10
+      print*, site_z_km(i)!, fix_elev_site(i)
+   end do
+   print*,' '
+   print*,' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
+   print*,' '
+   call write_observing_sites(edi_id, site_x_km, site_y_km, site_z_km, n_edi_files, paramRefi)
    call control_mesh(x0, y0, site_x_km, site_y_km, n_edi_files, settings, paramRefi)
    call write_makeMtr_param(0.0d0, 0.0d0, site_x_km, site_y_km, n_edi_files, paramRefi, globRefi)
-   call write_obs_sites(site_x_km, site_y_km, fix_elev_site, n_edi_files, paramRefi)
-   call resistivitty_attribute(n_sites, site_x_km, site_y_km, fix_elev_site, settings, globRefi, regions)
+   call write_obs_sites(site_x_km, site_y_km, site_z_km, n_edi_files, paramRefi)
+   ! print'(A50,F15.5)', 'Esto es fix_elev_site antes de resistivity_attribute', fix_elev_site(1)
+   call resistivitty_attribute(n_sites, site_x_km, site_y_km, site_z_km, settings, globRefi, regions)
 
-   ! stop
    call run_makeTetraMesh_and_assign_regions(regions)
    call run_TETGEN_and_refine_mesh(globRefi)
    call run_TetGen2Femtic(settings, globRefi)
@@ -815,9 +827,10 @@ contains
          y = east_km
          z = elev * 1.0d-3
 
+         print*, "                  Desde read_DEM                                "
          print*, "Esto es              X               Y               Z"
          print'(A12, 3(f15.5))'," ", x(1),y(1),z(1)
-      stop
+      ! stop
 
 
       case ("no")
@@ -950,7 +963,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
             if (x_ext < xminDEM .or. x_ext > xmaxDEM .or. &
                 y_ext < yminDEM .or. y_ext > ymaxDEM) then
 
-               print*,'Cae fuera'
                 k = k + 1
                 x_tmp(k) = x_ext
                 y_tmp(k) = y_ext
@@ -1035,6 +1047,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       end if
 
       s = adjustl(trim(line(ipos + 1:)))
+      ! print'(A,A)', 'Esto es s ', s
 
       !----------------------------------------
       ! 2) Detectar si es D:M:S o escalar
@@ -1162,20 +1175,27 @@ subroutine check_domain(x, y, z, n, OBJsettings)
                p1 = index(line, '"')
                p2 = index(line(p1 + 1:), '"') + p1
                EDIid(i) = line(p1 + 1:p2 - 1)
+               ! print*,EDIid
                found_id = .true.
             end if
 
             if (index(line, 'REFLAT=') > 0) then
+            ! if (index(line, 'LAT=') > 0) then
+               ! print*, line
                call parse_ref_value(line, EDIlat(i))
                found_lat = .true.
+               ! print*,EDIlat
             end if
 
+            ! if (index(line, 'LON=') > 0) then
             if (index(line, 'REFLONG=') > 0) then
                call parse_ref_value(line, EDIlong(i))
                found_lon = .true.
+               ! print*,EDIlong
             end if
 
             if (index(line, 'REFELEV=') > 0) then
+            ! if (index(line, 'ELEV=') > 0) then
                read (line(index(line, '=') + 1:), *) EDIelev(i)
                found_elev = .true.
             end if
@@ -1189,6 +1209,8 @@ subroutine check_domain(x, y, z, n, OBJsettings)
             print *, "ERROR: Missing coordinates in ", trim(EDIfiles(i))
             stop
          end if
+
+
       end do
 
       call lat_long_to_UTM_km(EDIlat, EDIlong, n, east_km, north_km)
@@ -1196,7 +1218,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       !here we set the convention of north pointing to north
       EDIcoordX = north_km
       EDIcoordY = east_km
-
 
 
    end subroutine read_edi_files
@@ -1288,10 +1309,15 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       real(dp), intent(in)  :: x(n), y(n), z(n)
       real(dp), intent(out):: xCenter, yCenter, zCenter
 
+      print*, ' '
       print'(A,F15.5)', "Esto es Z en compute_center", z(2)
+      print*, ' '
       xCenter = sum(x)/dble(n)
       yCenter = sum(y)/dble(n)
       zCenter = sum(z)/dble(n)
+      print*, ' '
+      print*, 'Esto es zCenter' 
+      print*, zCenter
    end subroutine
 !=========================================================
 !=======
@@ -1303,18 +1329,39 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       real(dp), intent(inout):: demX(nDEM), demY(nDEM), demZ(nDEM)
       integer :: i
 
+      siteCord_z = siteCord_z + 10d0
+      print*,"Esto es antes de recentrar"
+      print*,siteCord_z
+      pause
+      print*,"Esto es el recentrado"
+      print*,zCenter
+      pause
+
       siteCord_x(:) = siteCord_x(:) - xCenter
       siteCord_y(:) = siteCord_y(:) - yCenter
       siteCord_z(:) = siteCord_z(:) - zCenter
+
 
       demX(:) = demX(:) - xCenter
       demY(:) = demY(:) - yCenter
       demZ(:) = demZ(:) - zCenter
 
       do i = 1, nDEM
-         if (abs(demZ(i)) < 1.0d-15) demZ(i) = 0.0d0
+         if (abs(demZ(i)) < 1.0d-17) demZ(i) = 0.0d0
       end do
-   end subroutine
+
+      do i = 1, Nsites
+         if (abs(siteCord_z(i)) < 1.0d-17) siteCord_z(i) = 0.0d0
+      end do
+
+      print*,'Esto es siteCord_z en recenter_all despues de recentrar'
+      print *,  siteCord_z
+
+      pause
+
+
+
+   end subroutine recenter_all
 !=========================================================
 !=======
 !=========================================================
@@ -1367,27 +1414,31 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 !=========================================================
 !=======
 !=========================================================
-   subroutine snap_sites_to_dem(ediID, siteX, siteY, Nsites, DEMcorX, DEMcorY, DEMcorZ, NDEM, siteZ)
+   subroutine snap_sites_to_dem(siteX, siteY, siteZ, Nsites, DEMcorX, DEMcorY, DEMcorZ, NDEM, fix_elev_site)
 
       use mesh_config
       implicit none
       integer, intent(in):: Nsites, NDEM
-      real(dp), intent(in):: siteX(Nsites), siteY(Nsites)
+      real(dp), intent(in):: siteX(Nsites), siteY(Nsites), siteZ(Nsites)
       real(dp), intent(in):: DEMcorX(NDEM), DEMcorY(NDEM), DEMcorZ(NDEM)
-      real(dp), intent(inout):: siteZ(Nsites)
-      character(len=*) :: ediID(Nsites)
+      real(dp), allocatable, dimension(:), intent(out):: fix_elev_site
 
       character(len=512):: fname
       integer:: ii, j, jmin, iu
       real(dp):: dx, dy, d2, d2min
       real(dp):: zmin
 
+
+      allocate(fix_elev_site(n_sites))
+      fix_elev_site = 0.0d0
+      print'(A,f15.5)', "Esto es ANTES DEL dentro de rutina snap_sites: ", fix_elev_site(2)
       ! Protección mínima: elevación mínima del DEM
       zmin = minval(DEMcorZ)
-      ! if (zmin < 1.0d0) zmin = 1.0d-3   ! nunca 0 ni negativa
+      ! if (zmin < 1.0d0) zmin = 5000.0d0   ! nunca 0 ni negativa
 
       do ii = 1, Nsites
          d2min = huge(1.0d0)
+         ! print*, 'Esto es d2min: ', d2min
          jmin = 1
 
          do j = 1, NDEM
@@ -1396,38 +1447,31 @@ subroutine check_domain(x, y, z, n, OBJsettings)
             d2 = dx*dx + dy*dy
 
             if (d2 < d2min) then
+               ! print*, 'Esto es d2', d2
                d2min = d2
                jmin = j
             end if
          end do
 
-         siteZ(ii) = DEMcorZ(jmin)
+         fix_elev_site(ii) = DEMcorZ(jmin)
 
          ! seguridad extra
-         if (siteZ(ii) < zmin) siteZ(ii) = zmin
+         if (fix_elev_site(ii) < zmin) fix_elev_site(ii) = zmin
       end do
 
-      ! Writing final coordinate site files
-      ! siteZ = siteZ/1000.0d0
-      fname = trim(outdir)//'sites_coord_elev.dat'
-      open (newunit=iu, file=fname, status='replace', action='write')
-      do ii = 1, Nsites
-         write (iu, '(A12, 3f15.5)') ediID(ii), siteX(ii), siteY(ii), siteZ(ii)
-      end do
 
-      close (iu)
-
-   end subroutine
+   end subroutine snap_sites_to_dem
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_observing_sites(siteCorX, siteCorY, Nsites, OBJparamRefi)
+   subroutine write_observing_sites(ediID, siteCorX, siteCorY, siteCorZ, Nsites, OBJparamRefi)
 
       implicit none
 
       type(ParamRefinement), intent(in) :: OBJparamRefi
-      integer, intent(in) :: Nsites
-      real(dp), intent(in) :: siteCorX(Nsites), siteCorY(Nsites)
+      integer,           intent(in)  :: Nsites
+      real(dp),          intent(in) :: siteCorX(Nsites), siteCorY(Nsites), siteCorZ(Nsites)
+      character(len=*),  intent(in) :: ediID(Nsites)
 
       integer :: iu, i, k
       real(dp) :: r_ratio, e_ratio, current_r, current_e
@@ -1463,6 +1507,19 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       end do
 
       close (iu)
+
+
+
+      ! Writing final coordinate site files
+      ! fix_elev_site = 10.0d0
+      fname = trim(outdir)//'sites_coord_elev.dat'
+      open (newunit=iu, file=fname, status='replace', action='write')
+      do i = 1, Nsites
+         write (iu, '(A12, 3f15.5)') ediID(i), siteCorX(i), siteCorY(i), siteCorZ(i)
+      end do
+
+      close (iu)
+
    end subroutine write_observing_sites
 
 !=========================================================
@@ -1538,7 +1595,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       do j = 1, n
          if (.not. OBJsettings%has_sea) then
             ! Caso SIN mar: no hay batimetría
-            write (iu, '(3F15.5)') x(j), y(j), -1.0_dp/1000.0d0
+            write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
          else
             ! Caso CON mar
             if (z(i) < OBJsettings%sea_level) then
