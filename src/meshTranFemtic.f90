@@ -590,8 +590,8 @@ contains
          ! Aplicamos los porcentajes de acuerdo al manual/femticPy
          zerr(j, 1) = max(SD(j, 1), amp_ref*0.20d0)  ! INdiag  ZXX (20%)
          zerr(j, 2) = max(SD(j, 2), amp_ref*0.05d0)  ! OFFdiag ZXY (5%)
-         zerr(j, 3) = max(SD(j, 3), amp_ref*0.20d0)  ! OFFdiag ZYX (5%)
-         zerr(j, 4) = max(SD(j, 4), amp_ref*0.05d0)  ! INdiag  ZYY (20%)
+         zerr(j, 3) = max(SD(j, 3), amp_ref*0.05d0)  ! OFFdiag ZYX (5%)
+         zerr(j, 4) = max(SD(j, 4), amp_ref*0.20d0)  ! INdiag  ZYY (20%)
       end do
    end subroutine apply_error_floor
 !=========================================================
