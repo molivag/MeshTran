@@ -1329,7 +1329,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       real(dp), intent(inout):: demX(nDEM), demY(nDEM), demZ(nDEM)
       integer :: i
 
-      siteCord_z = siteCord_z + 10d0
+      ! siteCord_z = siteCord_z + 10d0
       print*,"Esto es antes de recentrar"
       print*,siteCord_z
       pause
