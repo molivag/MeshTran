@@ -17,12 +17,12 @@ TOPO_FILE = topography_for.dat
 BATHY_FILE = bathymetry_for.dat
 COSLI_FILE = coast_line.dat
 
-XMIN_DOM = -80.0
-XMAX_DOM =  80.0
-YMIN_DOM = -80.0
-YMAX_DOM =  80.0
-ZMIN_DOM = -50.0
-ZMAX_DOM =  50.0
+XMIN_DOM = -420.0
+XMAX_DOM =  420.0
+YMIN_DOM = -420.0
+YMAX_DOM =  420.0
+ZMIN_DOM = -100.0
+ZMAX_DOM =  420.0
 
 PAD_X = 50.0
 PAD_Y = 50.0
@@ -44,16 +44,16 @@ FMAX = 00
 ## =>  Ellipsoids Surface Mesh
 NUM_ELIPSES = 10
 SITEpadding = 40.0        ! Margen extra sobre el radio de los sites (km)
-FARelemSIZE = 25.0        ! Tamaño máximo de triángulo en el borde (km)
-SURF_RESOLUTION = 1.5     ! len en el centro (km)
+FARelemSIZE = 50.0        ! Tamaño máximo de triángulo en el borde (km) OBJparamRefi%sizeBoundary
+SURF_RESOLUTION = 5.0     ! len en el centro (km) OBJparamRefi%coreResol
 GROWTH = 2.0              ! Cuánto aumenta 'len' en cada elipse hacia afuera
 
 ## => Meshing for sites at the surface
-NUM_ESFERAS = 5
+NUM_ESFERAS = 10
 ROTATION = 0.0
-minRADIO = 0.05        ! Si este num se reduce, mejor formart de esfera y menos elementos pero no se si menos resol, parece que no
+minRADIO = 0.01        ! Si este num se reduce, mejor formart de esfera y menos elementos pero no se si menos resol, parece que no
 maxRADIO = 10.0
-minEDGES = 0.10        ! Esto controla fuertemente la densidad de elementos en los sites
+minEDGES = 0.01        ! Esto controla fuertemente la densidad de elementos en los sites
 
 
 
@@ -64,12 +64,12 @@ V_PADDING = 2.3           !vertical extension beyond the refinement
 
 
 NEAR_FIELD_RESOL = 4      !min elem size at sites (core_resolution)
-FAR_FIELD_RESOL =  5     !max elem size 
+FAR_FIELD_RESOL =  50     !max elem size 
 
-ITER_TET_REFI = 6
+ITER_TET_REFI = 4
 
 !esto controla radio a en makeMTR
-H_PADDING = 20             !horizontal extension beyond last site, a1 = max_distance_site x H_PADDING 
+H_PADDING = 30             !horizontal extension (in deep) beyond last site, a1 = max_distance_site x H_PADDING 
 TARGET_DEPTH = 15
 
 
