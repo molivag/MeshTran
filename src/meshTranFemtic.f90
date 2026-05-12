@@ -4,24 +4,24 @@ program femtic_mesh_driver
    use mesh_entities
    implicit none
 
-   type(GlobalRefinement) :: globRefi
-   type(ParamRefinement) :: paramRefi
-   TYPE(MeshSettings)::settings
-   type(ModelRegion) :: regions
-   ! type(SiteSet) :: sites
+   type(GlobalRefinement)  :: globRefi
+   type(ParamRefinement)   :: paramRefi
+   type(CoastLine)         :: coast_line
+   TYPE(MeshSettings)      :: settings
+   type(ModelRegion)       :: regions
 
    ! Control parameters
    character(len=256), allocatable:: edi_files(:), edi_id(:)
    real(dp), allocatable, dimension(:) :: edi_elev, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km
-   real(dp)::  sea_level, x0, y0, z0
+   real(dp)::  x0, y0, z0
    ! DEM data
-   integer:: n_dem, n_edi_files, n_sites, i
+   integer:: n_dem, n_edi_files, n_sites
    real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
 
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-   call read_set_femtic('set_meshtran.io', settings, paramRefi, globRefi, regions)
+   call read_set_femtic('set_meshtran.io', settings, coast_line, paramRefi, globRefi, regions)
    !---------------------------------------------------
    !     Check if Read input configutation file
    !---------------------------------------------------
@@ -110,9 +110,9 @@ program femtic_mesh_driver
    call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
    call define_analysis_domain(settings)
 
-   call write_topography(settings, dem_x_km, dem_y_km, dem_z_km, n_dem)
-   call write_bathymetry(settings, dem_x_km, dem_y_km, dem_z_km, n_dem)
-   call write_coast_line(settings)
+   call write_topography(settings, coast_line , dem_x_km, dem_y_km, dem_z_km, n_dem)
+   call write_bathymetry(settings, coast_line , dem_x_km, dem_y_km, dem_z_km, n_dem)
+   call write_coast_line(settings, coast_line)
 
    ! print*,' '
    ! print*,' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
@@ -156,16 +156,16 @@ contains
    !=========================================================
    !=======
    !=========================================================
-   subroutine read_set_femtic(fname, OBJsettings, OBJparamRefi, OBJglobRefi, OBJmodReg)
+   subroutine read_set_femtic(fname, OBJsettings, OBJcoastLine, OBJparamRefi, OBJglobRefi, OBJmodReg)
 
-      use mesh_entities
       implicit none
 
       character(len=*), intent(in) :: fname
-      type(MeshSettings), intent(inout) :: OBJsettings
-      type(ParamRefinement), INTENT(INout) :: OBJparamRefi
-      type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
-      type(ModelRegion), INTENT(INOUT) :: OBJmodReg
+      type(GlobalRefinement),    INTENT(INOUT) :: OBJglobRefi
+      type(ParamRefinement),     INTENT(INout) :: OBJparamRefi
+      type(MeshSettings),        intent(inout) :: OBJsettings
+      type(ModelRegion),         INTENT(INOUT) :: OBJmodReg
+      type(CoastLine),           INTENT(INOUT) :: OBJcoastLine
 
       character(len=256) :: line, key, val
       integer :: iu
@@ -214,8 +214,12 @@ contains
          case ('COSLI_FILE')
             OBJsettings%coastLine_file = trim(val)
 
+         case ('HAS_SEA')
+            OBJcoastLine%has_sea = trim(val)
+            ! read (val, *) OBJcoastLine%has_sea
+
          case ('SEA_LEVEL')
-            read (val, *) OBJsettings%sea_level
+            read (val, *) OBJcoastLine%sea_level
 
          case ('XMIN_DOM')
             read (val, *) OBJsettings%xminDOM
@@ -976,67 +980,89 @@ end subroutine surface_ellipsoids
       real(dp)                           :: scale
 
       select case (OBJsettings%dem_LatLong)
-      case ("yes")
-         open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
-         n = 0
-         do
-            read (iu, *, end=10)
-            n = n + 1
-         end do
-10       rewind (iu)
+         case ("yes")
+            open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
+            n = 0
+            do
+               read (iu, *, end=10)
+               n = n + 1
+            end do
+10          rewind (iu)
 
-         allocate (long(n), lat(n), elev(n))
-         do i = 1, n
-            read (iu, *) longg, latt, elevv
+            allocate (long(n), lat(n), elev(n))
+            do i = 1, n
+               read (iu, *) longg, latt, elevv
 
-            long(i) = longg 
-            lat(i)  = latt 
-            elev(i) = elevv
-         end do
+               long(i) = longg 
+               lat(i)  = latt 
+               elev(i) = elevv
+            end do
 
-         close (iu)
+            close (iu)
 
-         call lat_long_to_UTM_km(lat, long, n, east_km, north_km)
-      
-         allocate (x(n), y(n), z(n))
-         !here we set the convention of north pointing to north
-         x = north_km
-         y = east_km
-         z = elev * 1.0d-3
+            call lat_long_to_UTM_km(lat, long, n, east_km, north_km)
+         
+            allocate (x(n), y(n), z(n))
+            !here we set the convention of north pointing to north
+            x = north_km
+            y = east_km
+            z = elev * 1.0d-3
 
-         print*, "                  Desde read_DEM                                "
-         print*, "Esto es              X               Y               Z"
-         print'(A12, 3(f15.5))'," ", x(1),y(1),z(1)
-      ! stop
+            print*, "                  Desde read_DEM                                "
+            print*, "Esto es              X               Y               Z"
+            print'(A12, 3(f15.5))'," ", x(1),y(1),z(1)
+         ! stop
 
+         case ("no")
+            scale = 1.0_dp
+            if (OBJsettings%dem_units == 'meters') scale = 1.0d-3
 
-      case ("no")
-         scale = 1.0_dp
-         if (OBJsettings%dem_units == 'meters') scale = 1.0d-3
+            open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
+            n = 0
+            do
+               read (iu, *, end=20)
+               n = n + 1
+            end do
+20          rewind (iu)
 
-         open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
-         n = 0
-         do
-            read (iu, *, end=20)
-            n = n + 1
-         end do
-20       rewind (iu)
+            allocate (x(n), y(n), z(n))
+            do i = 1, n
+               read (iu, *) xx, yy, zz
+               ! x(i) = xx*scale
+               ! y(i) = yy*scale
+               x(i) = yy*scale   ! North → X ; applying MT convention
+               y(i) = xx*scale   ! East  → Y ; applying MT convention
+               z(i) = zz*scale
+            end do
 
-         allocate (x(n), y(n), z(n))
-         do i = 1, n
-            read (iu, *) xx, yy, zz
-            ! x(i) = xx*scale
-            ! y(i) = yy*scale
-            x(i) = yy*scale   ! North → X ; applying MT convention
-            y(i) = xx*scale   ! East  → Y ; applying MT convention
-            z(i) = zz*scale
-         end do
+            close (iu)
 
-         close (iu)
-
-      case default
+         case default
 
       end select
+
+
+      ! select case (OBJsettings%has_sea)
+      !    case ("yes")
+      !       do i = 1, size(z, dim=1), 1
+      !          if (z(i) .eq. 0) then
+      !             coastX(i) = x(i)
+      !             coastY(i) = y(i)
+      !
+      !       end do
+      !       coastLine = 
+      !
+      !       end if
+      !
+      !    case ("no")
+      !       continue
+      !    case default
+      !       print*, 'DEM have to be specified if has or not Sea'
+      !
+      !
+
+
+      ! end select
 
    end subroutine read_dem
 !=========================================================
@@ -1600,8 +1626,8 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       real(dp), intent(in):: DEMcorX(NDEM), DEMcorY(NDEM), DEMcorZ(NDEM)
       real(dp), allocatable, dimension(:), intent(out):: fix_elev_site
 
-      character(len=512):: fname
-      integer:: ii, j, jmin, iu
+      ! character(len=512):: fname
+      integer:: ii, j, jmin
       real(dp):: dx, dy, d2, d2min
       real(dp):: zmin
 
@@ -1705,7 +1731,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
    subroutine define_analysis_domain(OBJsettings)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
-      real(dp) :: xmin, ymin, xmax, ymax
+      ! real(dp) :: xmin, ymin, xmax, ymax
 
       integer:: iu
 
@@ -1728,9 +1754,10 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_topography(OBJsettings, x, y, z, n)
+   subroutine write_topography(OBJsettings, OBJcoastLine, x, y, z, n)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
+      type(CoastLine), INTENT(IN) :: OBJcoastLine
       integer, intent(in)     :: n
       real(dp), intent(in)    :: x(n), y(n), z(n)
       ! real(dp), INTENT(INOUT) :: z(:)
@@ -1740,12 +1767,12 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
       do i = 1, n
-         if (.not. OBJsettings%has_sea) then
+         if (OBJcoastLine%has_sea .eq. 'no') then
             ! Caso SIN mar: todo es tierra
             write (iu, '(3F15.5)') x(i), y(i), z(i)
          else
             ! Caso CON mar
-            if (z(i) > sea_level) then
+            if (z(i) > OBJcoastLine%sea_level) then
                write (iu, '(3F15.5)') x(i), y(i), z(i)
             else
                write (iu, '(3F15.5)') x(i), y(i), -1.0_dp
@@ -1757,10 +1784,11 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_bathymetry(OBJsettings, x, y, z, n)
+   subroutine write_bathymetry(OBJsettings, OBJcoastLine, x, y, z, n)
 
       implicit none
       TYPE(MeshSettings), INTENT(IN) :: OBJsettings
+      type(CoastLine), INTENT(IN) :: OBJcoastLine
       real(dp), intent(in):: x(:), y(:), z(:)
       ! real(dp), INTENT(INOUT) :: z(:)
       integer, intent(in):: n
@@ -1770,12 +1798,12 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%bathymetry_file, status='replace')
       do j = 1, n
-         if (.not. OBJsettings%has_sea) then
+         if (OBJcoastLine%has_sea .eq. 'no') then
             ! Caso SIN mar: no hay batimetría
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
          else
             ! Caso CON mar
-            if (z(i) < OBJsettings%sea_level) then
+            if (z(i) < OBJcoastLine%sea_level) then
                write (iu, '(3F15.5)') x(j), y(j), -z(j)
             else
                write (iu, '(3F15.5)') x(j), y(j), -1.0_dp/1000.0d0
@@ -1787,10 +1815,11 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_coast_line(OBJsettings)
+   subroutine write_coast_line(OBJsettings, OBJcoastLine)
 
       implicit none
-      type(MeshSettings), INTENT(IN) :: OBJsettings
+      type(MeshSettings),  INTENT(IN) :: OBJsettings
+      type(CoastLine),     INTENT(IN) :: OBJcoastLine
       integer:: iu
 
       ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
@@ -1798,7 +1827,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       ! ymin = OBJsettings%yminDOM - OBJsettings%pad_y
       ! ymax = OBJsettings%ymaxDOM + OBJsettings%pad_y
 
-      if (.not. OBJsettings%has_sea) then
+      if (OBJcoastLine%has_sea .eq. 'no') then
          open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
          write (iu, *) 1
          write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xminDOM - 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
@@ -2779,6 +2808,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       call execute_command_line('echo " Starting Refinement  by Iterative process "')
       r = 1
       do while (r .le. OBJmodReg%n_iterative_refi)
+      print*, ' '
          write (*, '(A,I0)') '      🔁 Refinement : ', r
          ! makeMtr output.$r
      write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && makeMtr output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
