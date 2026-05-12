@@ -7,7 +7,6 @@ module mesh_config
    type :: MeshSettings
       integer     :: threads = 0    !threads to build mesh
 
-
       ! ----- Archivos -----
       character(len=100) :: dem_file
       character(len=20) :: dem_units
@@ -19,8 +18,6 @@ module mesh_config
       character(len=100) :: coastLine_file
 
       ! ----- Dominio -----
-      logical :: has_sea
-      real(dp) :: sea_level
       real(dp) :: xminDOM, xmaxDOM
       real(dp) :: yminDOM, ymaxDOM
       real(dp) :: zminDOM, zmaxDOM
@@ -31,6 +28,16 @@ module mesh_config
 
 
    type ObserveSettings
+   end type
+
+
+   type :: CoastLine
+      character(len=5) :: has_sea
+      real, DIMENSION(:), allocatable :: x
+      real, DIMENSION(:), allocatable :: y
+      real(dp) :: sea_level
+      integer  :: nPoints
+
    end type
 
 
