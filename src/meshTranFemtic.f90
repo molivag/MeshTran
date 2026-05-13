@@ -29,7 +29,7 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Read Digital Elevation Model
    !---------------------------------------------------
-   call read_dem(settings, dem_x, dem_y, dem_z, n_dem)
+   call read_dem(settings, coast_line, dem_x, dem_y, dem_z, n_dem)
 
 
    ! print*, "METROS Esto es DEM in UTM "
@@ -965,15 +965,16 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_dem(OBJsettings, x, y, z, n)
+   subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, n)
 
       use mesh_config
       implicit none
 
       type(MeshSettings), intent(in)      :: OBJsettings
+      type(CoastLine)   , intent(inout)      :: OBJcoastLine
       real(dp), allocatable, intent(out)  :: x(:), y(:), z(:)
       integer, intent(out)                :: n
-      integer                            :: iu, i
+      integer                            :: iu, i, nCoastLine
       real(dp)                           :: xx, yy, zz, longg, latt, elevv
       real(dp), ALLOCATABLE              :: east_km(:), north_km(:)
       real(dp), ALLOCATABLE              :: long(:), lat(:), elev(:)
@@ -1041,28 +1042,38 @@ end subroutine surface_ellipsoids
 
       end select
 
+      primero debo identificar laz z con cota 0 luego eso me dara a la vez el numero de puntos que tiene el dem como linea de costa,
+      luego asigno memoria y luego comparo zCosta con zdem o sea z y cuando se cumpla entonces guardo x y y
 
-      ! select case (OBJsettings%has_sea)
-      !    case ("yes")
-      !       do i = 1, size(z, dim=1), 1
-      !          if (z(i) .eq. 0) then
-      !             coastX(i) = x(i)
-      !             coastY(i) = y(i)
-      !
-      !       end do
-      !       coastLine = 
-      !
-      !       end if
-      !
-      !    case ("no")
-      !       continue
-      !    case default
-      !       print*, 'DEM have to be specified if has or not Sea'
-      !
-      !
+      select case (OBJcoastLine%has_sea)
+         case ("yes")
 
+            nCoastLine = 0 
+            do i = 1, size(z, dim=1), 1
+               if (z(i) .eq. 0) then
+                  nCoastLine = nCoastLine + 1
+               endif
+            end do
+            OBJcoastLine%nPoints = nCoastLine
 
-      ! end select
+            allocate(OBJcoastLine%x(nCoastLine))
+            allocate(OBJcoastLine%y(nCoastLine))
+
+            k = 0
+            do i = 1, size(z, dim=1), 1
+               if (z(i) .eq. 0) then
+                  k = k + 1
+                  OBJcoastLine%x(k) = x(i)
+                  OBJcoastLine%y(k) = y(i)
+                  OBJcoastLine%z(k) = z(i)
+               endif
+            end do
+
+         case ("no")
+            continue
+         case default
+            print*, 'DEM have to be specified if has or not Sea'
+      end select
 
    end subroutine read_dem
 !=========================================================
