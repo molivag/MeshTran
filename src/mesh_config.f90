@@ -33,9 +33,10 @@ module mesh_config
 
    type :: CoastLine
       character(len=5) :: has_sea
-      real, DIMENSION(:), allocatable :: x
-      real, DIMENSION(:), allocatable :: y
-      real, DIMENSION(:), allocatable :: z
+      real, DIMENSION(:), allocatable  :: x
+      real, DIMENSION(:), allocatable  :: y
+      real, DIMENSION(:), allocatable  :: z
+      logical, allocatable             :: used(:)
       real(dp) :: sea_level
       integer  :: nPoints
 

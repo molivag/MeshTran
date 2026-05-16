@@ -32,8 +32,8 @@ program femtic_mesh_driver
    call read_dem(settings, coast_line, dem_x, dem_y, dem_z, n_dem)
 
 
-   ! print*, "METROS Esto es DEM in UTM "
-   ! print'(4(F15.5))', dem_x(1), dem_y(1), dem_z(1), dem_z(1) / 1.0d3
+   print*, "METROS Esto es DEM in UTM "
+   print'(4(F15.5))', dem_x(1), dem_y(1), dem_z(1), dem_z(1) / 1.0d3
 
 
    allocate (dem_x_km(n_dem), dem_y_km(n_dem), dem_z_km(n_dem))
@@ -96,6 +96,9 @@ program femtic_mesh_driver
    !     Recenter
    !---------------------------------------------------
    call recenter_all(n_edi_files, n_dem, x0, y0, z0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
+
+   print*, "METROS Esto es DEM in UTM despues de CENTRAR"
+   print'(4(F15.5))', dem_x_km(1), dem_y_km(1), dem_z(1), dem_z(1) / 1.0d3
 
    !a parti de aqui coordenadas de malla
    ! print'(A,f15.5)', "Esto es siteCord_z despues de recenter: ", site_z_km(2)
@@ -1042,40 +1045,214 @@ end subroutine surface_ellipsoids
 
       end select
 
-      ! primero debo identificar laz z con cota 0 luego eso me dara a la vez el numero de puntos que tiene el dem como linea de costa,
-      ! luego asigno memoria y luego comparo zCosta con zdem o sea z y cuando se cumpla entonces guardo x y y
+      ! select case (OBJcoastLine%has_sea)
+      !    case ("yes")
+      !
+      !       nCoastLine = 0 
+      !       do i = 1, size(z, dim=1), 1
+      !          if (abs(z(i)) .le. 1) then
+      !          ! if ( (z(i) .eq. -9999) .or. (z(i) .eq. -8888) ) then
+      !             nCoastLine = nCoastLine + 1
+      !          endif
+      !       end do
+      !       OBJcoastLine%nPoints = nCoastLine
+      !
+      !       allocate(OBJcoastLine%x(nCoastLine))
+      !       allocate(OBJcoastLine%y(nCoastLine))
+      !       allocate(OBJcoastLine%z(nCoastLine))
+      !
+      !       k = 0
+      !       do i = 1, size(z, dim=1), 1
+      !          ! if ( (z(i) .eq. -9999) .or. (z(i) .eq. -8888) ) then
+      !          if (abs(z(i)) .le. 1) then
+      !             k = k + 1
+      !             OBJcoastLine%x(k) = x(i)
+      !             OBJcoastLine%y(k) = y(i)
+      !             OBJcoastLine%z(k) = z(i)
+      !          endif
+      !       end do
+      !
+      !    case ("no")
+      !       continue
+      !    case default
+      !       print*, 'DEM have to be specified if has or not Sea'
+      ! end select
 
-      select case (OBJcoastLine%has_sea)
-         case ("yes")
-
-            nCoastLine = 0 
-            do i = 1, size(z, dim=1), 1
-               if (z(i) .eq. 0) then
-                  nCoastLine = nCoastLine + 1
-               endif
-            end do
-            OBJcoastLine%nPoints = nCoastLine
-
-            allocate(OBJcoastLine%x(nCoastLine))
-            allocate(OBJcoastLine%y(nCoastLine))
-
-            k = 0
-            do i = 1, size(z, dim=1), 1
-               if (z(i) .eq. 0) then
-                  k = k + 1
-                  OBJcoastLine%x(k) = x(i)
-                  OBJcoastLine%y(k) = y(i)
-                  OBJcoastLine%z(k) = z(i)
-               endif
-            end do
-
-         case ("no")
-            continue
-         case default
-            print*, 'DEM have to be specified if has or not Sea'
-      end select
+      ! call nearest_neighbor_ordering(OBJcoastLine)
 
    end subroutine read_dem
+!=========================================================
+!=======
+!=========================================================
+   subroutine nearest_neighbor_ordering(OBJcoastLine)
+      implicit none
+
+      type(CoastLine)   , intent(inout)      :: OBJcoastLine
+      logical :: used(OBJcoastLine%nPoints)
+      real(dp), dimension (:), allocatable :: distance, orderedX, orderedY
+
+      real(dp) :: start
+      ! logical :: 
+      integer ::  i, start_loc, current, k, next
+
+      allocate(&
+         OBJcoastLine%used(OBJcoastLine%nPoints),&
+         distance(OBJcoastLine%nPoints),&
+         orderedX(OBJcoastLine%nPoints),&
+         orderedY(OBJcoastLine%nPoints)&
+      )
+
+      OBJcoastLine%used = .false.
+      start = minval(OBJcoastLine%x, dim=1, mask=(.not. OBJcoastLine%used)) 
+      start_loc = minloc(OBJcoastLine%x, mask=(.not. OBJcoastLine%used), dim=1)
+      ! start_loc = minloc(OBJcoastLine%x, dim=1) 
+
+
+
+
+      print*, 'Est es el piunto mas occidental: ', start
+      print*, 'Est es la location: ', start_loc
+
+      ! print*, 'X-coast line         Y-coast line         Z-coast line'
+      ! do i =1, OBJcoastLine%nPoints
+      !    print'(I3, 3(2x, f15.5))', i, OBJcoastLine%x(i), OBJcoastLine%y(i), OBJcoastLine%z(i)
+      ! end do
+
+
+      ! location or position in x-vector coordinate
+      current = start_loc
+      ! filling the ordered vector-x with the position "current" in vector-x of coast line
+      orderedX(1) = coast_line%x(current)
+      orderedY(1) = coast_line%y(current)
+      !mark that "current" position as used
+      OBJcoastLine%used(current) = .true.
+         print*, 'k             distance              next'
+      do k  = 2, OBJcoastLine%nPoints
+         ! print*, ' ' 
+         do i = 1, OBJcoastLine%nPoints
+      
+            if ( OBJcoastLine%used(i) ) then
+               distance(i) = huge(1.0_dp)
+            else
+               distance(i) = SQRT(&
+               ( coast_line%x(i) - coast_line%x(current) )**2 &
+               + &
+               ( coast_line%y(i) - coast_line%y(current) )**2 &
+               )
+            end if
+
+         
+            ! print*, k, i, distance(i)
+         end do
+         next = minloc(distance, dim=1)
+         orderedX(k) = coast_line%x(next)
+         orderedY(k) = coast_line%y(next)
+
+         OBJcoastLine%used(next) = .true.
+         current = next
+      end do
+      
+         ! print*, '  orderedX       originalX        orderedY       originalY'
+         ! do i = 1, OBJcoastLine%nPoints
+         ! print'(4(1x, f15.5))', orderedX(i), coast_line%x(i),  orderedY(i), coast_line%y(i)
+      ! enddo
+
+      call debug_coastline(orderedX, orderedY, OBJcoastLine%nPoints)
+
+   end subroutine nearest_neighbor_ordering
+!=========================================================
+!=======
+!=========================================================
+   subroutine read_simplifiedCurve(npts, poly)
+      implicit none
+      real(dp), dimension(:,:), allocatable, intent(out) :: poly
+      integer, INTENT(OUT) :: npts
+      integer :: i, j, iu, npolygons
+
+      open (newunit=iu , file='preprocessing/geometry/coastline_simplified.dat', status='old' )
+
+      read(iu,15) npolygons
+      do i = 1, npolygons
+
+         read(iu,15) npts
+      
+         allocate(poly(npts,2))
+      
+         do j = 1, npts
+             read(iu,*) poly(j,1), poly(j,2)
+         end do
+      
+      end do 
+      close(unit=iu)
+      
+      15 format (I5)
+      16 format (2/, 2(f10.5),/)
+
+
+   end subroutine read_simplifiedCurve
+!=========================================================
+!=======
+!=========================================================
+   subroutine debug_coastline(orderedX, orderedY, n)
+
+      implicit none
+
+      integer, intent(in) :: n
+      real(8), intent(in) :: orderedX(n)
+      real(8), intent(in) :: orderedY(n)
+
+      integer :: i, stat
+      character(len=10) :: answer
+      character(len=256) :: cmd
+
+      !----------------------------------------
+      ! write temporary coastline
+      !----------------------------------------
+
+      open(unit=99, file='coast_debug.xy', status='replace')
+
+      do i = 1, n
+         write(99,*) orderedX(i), orderedY(i)
+      end do
+
+      close(99)
+
+      !----------------------------------------
+      ! launch gnuplot
+      !----------------------------------------
+
+
+      ! write (cmd, '(A)') gnuplot -persist -e 'plot "coast_debug.dat" w lp' '
+      ! write(cmd,'(A)') 'gnuplot -persist -e "plot ''coast_debug.xy'' w lp"'
+      write(cmd,'(A)') 'gnuplot -persist -e "plot ''./preprocessing/geometry/coastline_simplified.dat'' w lp"'
+         call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+         if (stat /= 0) error stop 'ERROR executing gnuplot'
+
+      ! call execute_command_line( &
+      ! "gnuplot -persist -e " &
+      ! // 'set title ''MeshTran CoastLine Debug''; ' &
+      ! // 'set size ratio -1; ' &
+      ! // 'plot ''coast_debug.xy'' w lp pt 7 lw 2' &
+      ! // '" '&
+      ! )
+      !
+      !----------------------------------------
+      ! ask user validation
+      !----------------------------------------
+
+      print *
+      print *, 'Is coastline correct? (yes/no)'
+      read(*,*) answer
+
+      if (trim(adjustl(answer)) /= 'yes') then
+
+         print *
+         print *, 'ERROR: coastline validation failed'
+         stop
+
+      end if
+
+   end subroutine
 !=========================================================
 !=======
 !=========================================================
@@ -1831,7 +2008,9 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       implicit none
       type(MeshSettings),  INTENT(IN) :: OBJsettings
       type(CoastLine),     INTENT(IN) :: OBJcoastLine
-      integer:: iu
+      real(dp), dimension(:,:), allocatable :: simplified_curve
+      integer:: iu, npoint_simple
+      integer :: i , j
 
       ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
       ! xmax = OBJsettings%xmaxDOM + OBJsettings%pad_x
@@ -1847,7 +2026,15 @@ subroutine check_domain(x, y, z, n, OBJsettings)
          write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xminDOM - 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 1, 0
          close (iu)
       else
-         stop 'Sea case not implemented yet'
+         print*, 'Sea case not implemented yet'
+
+         call read_simplifiedCurve(npoint_simple, simplified_curve)
+! do i = 1, npoint_simple
+!             print*, (simplified_curve(i, j), j=1,2)
+!          end do
+
+         ! stop 'Sea case not implemented yet'
+         pause
       end if
    end subroutine
 !=========================================================
