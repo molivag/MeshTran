@@ -8,9 +8,10 @@
 MESH_NATURE = native
 THREADS = 18
 
-DEM_FILE = TOTPO_KAL_BBMT_FLAT_475m.xyz
+DEM_FILE = MET_50m_mosaic_valles_Lcosta_cropped.xyz
+__DEM_FILE = TOTPO_KAL_BBMT_FLAT_475m.xyz
 DEM_LatLon = no 
-DEM_UNITS = kilometers 
+DEM_UNITS = meters                    !meters or kilometers
 assumming elevation in meters
 
 TOPO_FILE = topography_for.dat 
@@ -27,7 +28,7 @@ ZMAX_DOM =  420.0
 PAD_X = 50.0
 PAD_Y = 50.0
 
-HAS_SEA = NO
+HAS_SEA = yes
 SEA_LEVEL = 0.0
 
 ## =>  Observation data
