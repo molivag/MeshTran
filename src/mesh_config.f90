@@ -35,6 +35,7 @@ module mesh_config
       character(len=5) :: has_sea
       real, DIMENSION(:), allocatable :: x
       real, DIMENSION(:), allocatable :: y
+      real, DIMENSION(:), allocatable :: z
       real(dp) :: sea_level
       integer  :: nPoints
 
