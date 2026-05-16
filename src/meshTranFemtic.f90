@@ -974,7 +974,7 @@ end subroutine surface_ellipsoids
       type(CoastLine)   , intent(inout)      :: OBJcoastLine
       real(dp), allocatable, intent(out)  :: x(:), y(:), z(:)
       integer, intent(out)                :: n
-      integer                            :: iu, i, nCoastLine
+      integer                            :: iu, i, nCoastLine, k
       real(dp)                           :: xx, yy, zz, longg, latt, elevv
       real(dp), ALLOCATABLE              :: east_km(:), north_km(:)
       real(dp), ALLOCATABLE              :: long(:), lat(:), elev(:)
@@ -1042,8 +1042,8 @@ end subroutine surface_ellipsoids
 
       end select
 
-      primero debo identificar laz z con cota 0 luego eso me dara a la vez el numero de puntos que tiene el dem como linea de costa,
-      luego asigno memoria y luego comparo zCosta con zdem o sea z y cuando se cumpla entonces guardo x y y
+      ! primero debo identificar laz z con cota 0 luego eso me dara a la vez el numero de puntos que tiene el dem como linea de costa,
+      ! luego asigno memoria y luego comparo zCosta con zdem o sea z y cuando se cumpla entonces guardo x y y
 
       select case (OBJcoastLine%has_sea)
          case ("yes")
@@ -1393,23 +1393,23 @@ subroutine check_domain(x, y, z, n, OBJsettings)
                found_id = .true.
             end if
 
-            if (index(line, 'REFLAT=') > 0) then
-            ! if (index(line, 'LAT=') > 0) then
+            ! if (index(line, 'REFLAT=') > 0) then
+            if (index(line, 'LAT=') > 0) then
                ! print*, line
                call parse_ref_value(line, EDIlat(i))
                found_lat = .true.
                ! print*,EDIlat
             end if
 
-            ! if (index(line, 'LON=') > 0) then
-            if (index(line, 'REFLONG=') > 0) then
+            if (index(line, 'LONG=') > 0) then
+            ! if (index(line, 'REFLONG=') > 0) then
                call parse_ref_value(line, EDIlong(i))
                found_lon = .true.
                ! print*,EDIlong
             end if
 
-            if (index(line, 'REFELEV=') > 0) then
-            ! if (index(line, 'ELEV=') > 0) then
+            ! if (index(line, 'REFELEV=') > 0) then
+            if (index(line, 'ELEV=') > 0) then
                read (line(index(line, '=') + 1:), *) EDIelev(i)
                found_elev = .true.
             end if
@@ -1814,7 +1814,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
          else
             ! Caso CON mar
-            if (z(i) < OBJcoastLine%sea_level) then
+            if (z(j) < OBJcoastLine%sea_level) then
                write (iu, '(3F15.5)') x(j), y(j), -z(j)
             else
                write (iu, '(3F15.5)') x(j), y(j), -1.0_dp/1000.0d0
