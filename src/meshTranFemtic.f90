@@ -1356,23 +1356,26 @@ subroutine check_domain(x, y, z, n, OBJsettings)
                found_id = .true.
             end if
 
-            if (index(line, 'REFLAT=') > 0) then
-            ! if (index(line, 'LAT=') > 0) then
+            ! if (index(line, 'REFLAT=') > 0) then
+
+            if (index(line, 'LAT=') > 0) then
                ! print*, line
                call parse_ref_value(line, EDIlat(i))
                found_lat = .true.
                ! print*,EDIlat
             end if
 
-            ! if (index(line, 'LON=') > 0) then
-            if (index(line, 'REFLONG=') > 0) then
+            ! if (index(line, 'REFLONG=') > 0) then
+
+            if (index(line, 'LONG=') > 0) then
                call parse_ref_value(line, EDIlong(i))
                found_lon = .true.
                ! print*,EDIlong
             end if
 
-            if (index(line, 'REFELEV=') > 0) then
-            ! if (index(line, 'ELEV=') > 0) then
+            ! if (index(line, 'REFELEV=') > 0) then
+
+            if (index(line, 'ELEV=') > 0) then
                read (line(index(line, '=') + 1:), *) EDIelev(i)
                found_elev = .true.
             end if
@@ -1924,7 +1927,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
             write (iu_out, '(I0)') OBJmodRegions%Nregions
 
             do k = 1, OBJmodRegions%Nregions
-               write (iu_out, '(I3,3F10.3,I4,1PE12.4)') k, OBJmodRegions%coord(:, k), OBJmodRegions%ID(k), OBJmodRegions%rho(k)
+               write (iu_out, '(I3,3F10.3,I4,A)') k, OBJmodRegions%coord(:, k), OBJmodRegions%ID(k), " 1e9" !OBJmodRegions%rho(k)
             end do
          end if
 
