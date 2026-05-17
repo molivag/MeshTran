@@ -18,15 +18,15 @@ TOPO_FILE = topography_for.dat
 BATHY_FILE = bathymetry_for.dat
 COSLI_FILE = coast_line.dat
 
-XMIN_DOM = -420.0
-XMAX_DOM =  420.0
-YMIN_DOM = -420.0
-YMAX_DOM =  420.0
-ZMIN_DOM = -100.0
-ZMAX_DOM =  420.0
+XMIN_DOM = -32.0
+XMAX_DOM =  20.0
+YMIN_DOM = -25.0
+YMAX_DOM =  30.0
+ZMIN_DOM = -50.0
+ZMAX_DOM =  50.0
 
-PAD_X = 50.0
-PAD_Y = 50.0
+PAD_X = 5.0
+PAD_Y = 5.0
 
 HAS_SEA = yes
 SEA_LEVEL = 0.0
@@ -43,11 +43,11 @@ FMAX = 00
 
 
 ## =>  Ellipsoids Surface Mesh
-NUM_ELIPSES = 10
-SITEpadding = 40.0        ! Margen extra sobre el radio de los sites (km)
-FARelemSIZE = 50.0        ! Tamaño máximo de triángulo en el borde (km) OBJparamRefi%sizeBoundary
+NUM_ELIPSES = 5
+SITEpadding = 4.0        ! Margen extra sobre el radio de los sites (km)
+FARelemSIZE = 15.0        ! Tamaño máximo de triángulo en el borde (km) OBJparamRefi%sizeBoundary
 SURF_RESOLUTION = 5.0     ! len en el centro (km) OBJparamRefi%coreResol
-GROWTH = 2.0              ! Cuánto aumenta 'len' en cada elipse hacia afuera
+GROWTH = 1.0              ! Cuánto aumenta 'len' en cada elipse hacia afuera
 
 ## => Meshing for sites at the surface
 NUM_ESFERAS = 10
@@ -65,9 +65,9 @@ V_PADDING = 2.3           !vertical extension beyond the refinement
 
 
 NEAR_FIELD_RESOL = 4      !min elem size at sites (core_resolution)
-FAR_FIELD_RESOL =  50     !max elem size 
+FAR_FIELD_RESOL =  10     !max elem size 
 
-ITER_TET_REFI = 4
+ITER_TET_REFI = 7
 
 !esto controla radio a en makeMTR
 H_PADDING = 30             !horizontal extension (in deep) beyond last site, a1 = max_distance_site x H_PADDING 
@@ -84,14 +84,17 @@ BKGRD_RHO = 100
 F_MIN_HZ = 0.001
 
 FRAC_SKIN_DEPTH = 5.55    !No quiero que el tamaño de elemento (o parámetro) sea mayor que el 25% de la skin depth
+
+
 ## => Regions Atributes in the model
 ELLIPSES = 9 
-REGIONS = 2
-LOCATION = 1.0 2.0 -39.0    0.0 0.0 39.0 	  !xyz xyz
-ID_REGION =     10               20	    		!reg1 reg2
-RHO_REGIONS =   1.0e9           1.0e2		    !rho1 rho2
-REP_PARTITION = -1                9
-FIX_RESISTIVITY = 1 0
+REGIONS = 3
+
+LOCATION = 0.0 0.0 -20.0    -15.0 15.0  2.0    0.0 0.0 45.0       	  !xyz xyz  xyz
+ID_REGION =     10               20                 30	    		         !reg1 reg2
+RHO_REGIONS =   1.0e9          0.01                1.0e2		             !rho1 rho2
+REP_PARTITION = -1              -1                   9           
+FIX_RESISTIVITY = 1              1                   0           
 
 ## => Refinement for mesh parameter based on spheres
 PARAM_ESFER = 2

@@ -27,13 +27,13 @@ program femtic_mesh_driver
    !---------------------------------------------------
    call mesh_convertion(settings)
    !---------------------------------------------------
-   !     Read Digital Elevation Model
+   !     Read Digital Elevation Model and output in km
    !---------------------------------------------------
    call read_dem(settings, coast_line, dem_x, dem_y, dem_z, n_dem)
 
 
-   print*, "METROS Esto es DEM in UTM "
-   print'(4(F15.5))', dem_x(1), dem_y(1), dem_z(1), dem_z(1) / 1.0d3
+   print*, "Esto es DEM en km UTM "
+   print'(4(F15.5))', dem_x(1), dem_y(1), dem_z(1)!, dem_z(1) / 1.0d3
 
 
    allocate (dem_x_km(n_dem), dem_y_km(n_dem), dem_z_km(n_dem))
@@ -98,7 +98,7 @@ program femtic_mesh_driver
    call recenter_all(n_edi_files, n_dem, x0, y0, z0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
 
    print*, "METROS Esto es DEM in UTM despues de CENTRAR"
-   print'(4(F15.5))', dem_x_km(1), dem_y_km(1), dem_z(1), dem_z(1) / 1.0d3
+   print'(4(F15.5))', dem_x_km(1), dem_y_km(1), dem_z_km(1)
 
    !a parti de aqui coordenadas de malla
    ! print'(A,f15.5)', "Esto es siteCord_z despues de recenter: ", site_z_km(2)
@@ -968,7 +968,7 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, n)
+   subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, nDEMpoints)
 
       use mesh_config
       implicit none
@@ -976,7 +976,7 @@ end subroutine surface_ellipsoids
       type(MeshSettings), intent(in)      :: OBJsettings
       type(CoastLine)   , intent(inout)      :: OBJcoastLine
       real(dp), allocatable, intent(out)  :: x(:), y(:), z(:)
-      integer, intent(out)                :: n
+      integer, intent(out)                :: nDEMpoints
       integer                            :: iu, i, nCoastLine, k
       real(dp)                           :: xx, yy, zz, longg, latt, elevv
       real(dp), ALLOCATABLE              :: east_km(:), north_km(:)
@@ -986,15 +986,15 @@ end subroutine surface_ellipsoids
       select case (OBJsettings%dem_LatLong)
          case ("yes")
             open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
-            n = 0
+            nDEMpoints = 0
             do
                read (iu, *, end=10)
-               n = n + 1
+               nDEMpoints = nDEMpoints + 1
             end do
 10          rewind (iu)
 
-            allocate (long(n), lat(n), elev(n))
-            do i = 1, n
+            allocate (long(nDEMpoints), lat(nDEMpoints), elev(nDEMpoints))
+            do i = 1, nDEMpoints
                read (iu, *) longg, latt, elevv
 
                long(i) = longg 
@@ -1004,9 +1004,9 @@ end subroutine surface_ellipsoids
 
             close (iu)
 
-            call lat_long_to_UTM_km(lat, long, n, east_km, north_km)
+            call lat_long_to_UTM_km(lat, long, nDEMpoints, east_km, north_km)
          
-            allocate (x(n), y(n), z(n))
+            allocate (x(nDEMpoints), y(nDEMpoints), z(nDEMpoints))
             !here we set the convention of north pointing to north
             x = north_km
             y = east_km
@@ -1020,28 +1020,35 @@ end subroutine surface_ellipsoids
          case ("no")
             scale = 1.0_dp
             if (OBJsettings%dem_units == 'meters') scale = 1.0d-3
+            print*, 'nombre del archivo DEM: ',OBJsettings%dem_file
+            print*, 'unidades DEM: ', OBJsettings%dem_units
+            print*, 'la escala es: ', scale
+            ! print*, 'Esto es la posicion 40 de z'
+            
 
             open (newunit=iu, file='preprocessing/DEM/'//OBJsettings%dem_file, status='old')
-            n = 0
+            nDEMpoints = 0
             do
                read (iu, *, end=20)
-               n = n + 1
+               nDEMpoints = nDEMpoints + 1
             end do
 20          rewind (iu)
 
-            allocate (x(n), y(n), z(n))
-            do i = 1, n
+            allocate (x(nDEMpoints), y(nDEMpoints), z(nDEMpoints))
+            do i = 1, nDEMpoints
                read (iu, *) xx, yy, zz
                ! x(i) = xx*scale
                ! y(i) = yy*scale
                x(i) = yy*scale   ! North → X ; applying MT convention
                y(i) = xx*scale   ! East  → Y ; applying MT convention
-               z(i) = zz*scale
+               z(i) = zz!*scale
             end do
 
             close (iu)
-
+            call check_DEM_no_data(z,nDEMpoints)
+            z = z*scale
          case default
+      
 
       end select
 
@@ -1081,6 +1088,66 @@ end subroutine surface_ellipsoids
       ! call nearest_neighbor_ordering(OBJcoastLine)
 
    end subroutine read_dem
+!=========================================================
+!=======
+!=========================================================
+   subroutine check_DEM_no_data(z,npointsDEM)
+
+      implicit none
+
+      integer, intent(in)                 :: npointsDEM
+      real(dp), intent(inout)             :: z(:)
+
+      logical, allocatable                :: isNoData(:)
+
+      integer                             :: i
+      integer                             :: countNoData
+
+      !----------------------------------------
+      ! allocate nodata mask
+      !----------------------------------------
+
+      allocate(isNoData(npointsDEM))
+
+      isNoData = .false.
+
+      countNoData = 0
+
+      !----------------------------------------
+      ! detect nodata values
+      !----------------------------------------
+
+      do i = 1, npointsDEM
+
+         if ( (z(i) == -9999.0_dp) .or. (z(i) == -8888.0_dp) ) then
+
+            isNoData(i) = .true.
+            countNoData = countNoData + 1
+
+         end if
+
+      end do
+
+      print *
+      print *, 'NoData points detected: ', countNoData
+
+      !----------------------------------------
+      ! replace nodata by synthetic bathymetry
+      !----------------------------------------
+
+      do i = 1, npointsDEM
+
+         if (isNoData(i)) then
+
+            z(i) = -30.0_dp
+
+         end if
+
+      end do
+
+      deallocate(isNoData)
+
+   end subroutine check_DEM_no_data
 !=========================================================
 !=======
 !=========================================================
@@ -1205,7 +1272,7 @@ end subroutine surface_ellipsoids
       ! ----------------------------------------------------------
       ! Extension distance outside the domain
       ! ----------------------------------------------------------
-      extDist = 300.0_dp   ! km
+      extDist = 10.0_dp   ! km
       
       ! ==========================================================
       ! FIRST EXTREME
@@ -1545,7 +1612,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       call execute_command_line( &
          "ls preprocessing/edi_files/*.edi > "//tmpfile, &
          exitstat=ios)
-
       if (ios /= 0) then
          write (error_unit, *) "ERROR: failed to list preprocessing/edi_files/*.edi"
          stop
@@ -1853,7 +1919,7 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 
       write (iu, '(A)') '# x_km   y_km   z_m'
       do i = 1, nn_dem
-         write (iu, '(F15.5, 1X, F15.5, 1X, F15.5)') demXkm(i), demYkm(i), demZmts(i)
+         write (iu, '(F15.5, 1X, F15.5, 1X, F15.5)') demXkm(i), demYkm(i), demZmts(i)*1000.0
       end do
       close (iu)
 
@@ -2047,11 +2113,11 @@ subroutine check_domain(x, y, z, n, OBJsettings)
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
          else
             ! Caso CON mar
-            if (z(j) < OBJcoastLine%sea_level) then
+            ! if (z(j) < OBJcoastLine%sea_level) then
                write (iu, '(3F15.5)') x(j), y(j), -z(j)
-            else
-               write (iu, '(3F15.5)') x(j), y(j), -1.0_dp/1000.0d0
-            end if
+            ! else
+               ! write (iu, '(3F15.5)') x(j), y(j), -1.0_dp/1000.0d0
+            ! end if
          end if
       end do
       close (iu)
@@ -2110,7 +2176,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 
       end if
          close (iu)
-         pause
    end subroutine write_coast_line
 !=========================================================
 !=======
