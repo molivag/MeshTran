@@ -143,5 +143,287 @@ module coast_line
       end subroutine get_main_coastline_id
 
 
+subroutine close_coastline( coast_x, coast_y, n_coast, &
+                            dem_x, dem_y, dem_z, nx, ny, &
+                            xmin, xmax, ymin, ymax, &
+                            closed_x, closed_y, n_closed )
+
+   implicit none
+
+   ! ============================================================
+   ! INPUT
+   ! ============================================================
+
+   integer, intent(in) :: n_coast
+   integer, intent(in) :: nx, ny
+
+   real(8), intent(in) :: coast_x(n_coast)
+   real(8), intent(in) :: coast_y(n_coast)
+
+   real(8), intent(in) :: dem_x(nx,ny)
+   real(8), intent(in) :: dem_y(nx,ny)
+   real(8), intent(in) :: dem_z(nx,ny)
+
+   real(8), intent(in) :: xmin, xmax
+   real(8), intent(in) :: ymin, ymax
+
+   ! ============================================================
+   ! OUTPUT
+   ! ============================================================
+
+   integer, intent(out) :: n_closed
+
+   real(8), allocatable, intent(out) :: closed_x(:)
+   real(8), allocatable, intent(out) :: closed_y(:)
+
+   ! ============================================================
+   ! LOCAL
+   ! ============================================================
+
+   integer :: i, j
+   integer :: nsea
+
+   real(8) :: frac
+
+   logical :: sea_west
+   logical :: sea_east
+   logical :: sea_north
+   logical :: sea_south
+
+   character(len=10) :: close_to
+
+   real(8) :: area
+
+   ! ============================================================
+   ! INITIALIZE
+   ! ============================================================
+
+   sea_west  = .false.
+   sea_east  = .false.
+   sea_north = .false.
+   sea_south = .false.
+
+   ! ============================================================
+   ! WEST EDGE
+   ! ============================================================
+
+   nsea = 0
+
+   do j = 1, ny
+      if ( dem_z(1,j) < 0.d0 ) then
+         nsea = nsea + 1
+      endif
+   enddo
+
+   frac = real(nsea,8) / real(ny,8)
+
+   if ( frac > 0.7d0 ) sea_west = .true.
+
+   ! ============================================================
+   ! EAST EDGE
+   ! ============================================================
+
+   nsea = 0
+
+   do j = 1, ny
+      if ( dem_z(nx,j) < 0.d0 ) then
+         nsea = nsea + 1
+      endif
+   enddo
+
+   frac = real(nsea,8) / real(ny,8)
+
+   if ( frac > 0.7d0 ) sea_east = .true.
+
+   ! ============================================================
+   ! SOUTH EDGE
+   ! ============================================================
+
+   nsea = 0
+
+   do i = 1, nx
+      if ( dem_z(i,1) < 0.d0 ) then
+         nsea = nsea + 1
+      endif
+   enddo
+
+   frac = real(nsea,8) / real(nx,8)
+
+   if ( frac > 0.7d0 ) sea_south = .true.
+
+   ! ============================================================
+   ! NORTH EDGE
+   ! ============================================================
+
+   nsea = 0
+
+   do i = 1, nx
+      if ( dem_z(i,ny) < 0.d0 ) then
+         nsea = nsea + 1
+      endif
+   enddo
+
+   frac = real(nsea,8) / real(nx,8)
+
+   if ( frac > 0.7d0 ) sea_north = .true.
+
+   ! ============================================================
+   ! PRINT INFO
+   ! ============================================================
+
+   print *, "Sea west  :", sea_west
+   print *, "Sea east  :", sea_east
+   print *, "Sea south :", sea_south
+   print *, "Sea north :", sea_north
+
+   ! ============================================================
+   ! DETERMINE CLOSURE SIDE
+   ! ============================================================
+
+   close_to = "none"
+
+   if ( sea_east ) then
+      close_to = "east"
+   elseif ( sea_west ) then
+      close_to = "west"
+   elseif ( sea_north ) then
+      close_to = "north"
+   elseif ( sea_south ) then
+      close_to = "south"
+   endif
+
+   print *, "Closing coastline toward :", trim(close_to)
+
+   ! ============================================================
+   ! CHECK ORIENTATION (signed area)
+   ! ============================================================
+
+   area = 0.d0
+
+   do i = 1, n_coast-1
+
+      area = area + &
+             ( coast_x(i) * coast_y(i+1) - &
+               coast_x(i+1) * coast_y(i) )
+
+   enddo
+
+   area = 0.5d0 * area
+
+   print *, "Signed area =", area
+
+   if ( area > 0.d0 ) then
+      print *, "Orientation : CCW"
+   else
+      print *, "Orientation : CW"
+   endif
+
+   ! ============================================================
+   ! ALLOCATE CLOSED POLYGON
+   ! ============================================================
+
+   n_closed = n_coast + 4
+
+   allocate( closed_x(n_closed) )
+   allocate( closed_y(n_closed) )
+
+   ! ============================================================
+   ! COPY ORIGINAL COASTLINE
+   ! ============================================================
+
+   closed_x(1:n_coast) = coast_x(:)
+   closed_y(1:n_coast) = coast_y(:)
+
+   ! ============================================================
+   ! CLOSE POLYGON
+   ! ============================================================
+
+   select case ( trim(close_to) )
+
+   ! ============================================================
+   ! EAST
+   ! ============================================================
+
+   case ("east")
+
+      closed_x(n_coast+1) = xmax
+      closed_y(n_coast+1) = coast_y(n_coast)
+
+      closed_x(n_coast+2) = xmax
+      closed_y(n_coast+2) = ymax
+
+      closed_x(n_coast+3) = xmax
+      closed_y(n_coast+3) = coast_y(1)
+
+      closed_x(n_coast+4) = coast_x(1)
+      closed_y(n_coast+4) = coast_y(1)
+
+   ! ============================================================
+   ! WEST
+   ! ============================================================
+
+   case ("west")
+
+      closed_x(n_coast+1) = xmin
+      closed_y(n_coast+1) = coast_y(n_coast)
+
+      closed_x(n_coast+2) = xmin
+      closed_y(n_coast+2) = ymax
+
+      closed_x(n_coast+3) = xmin
+      closed_y(n_coast+3) = coast_y(1)
+
+      closed_x(n_coast+4) = coast_x(1)
+      closed_y(n_coast+4) = coast_y(1)
+
+   ! ============================================================
+   ! NORTH
+   ! ============================================================
+
+   case ("north")
+
+      closed_x(n_coast+1) = coast_x(n_coast)
+      closed_y(n_coast+1) = ymax
+
+      closed_x(n_coast+2) = xmax
+      closed_y(n_coast+2) = ymax
+
+      closed_x(n_coast+3) = coast_x(1)
+      closed_y(n_coast+3) = ymax
+
+      closed_x(n_coast+4) = coast_x(1)
+      closed_y(n_coast+4) = coast_y(1)
+
+   ! ============================================================
+   ! SOUTH
+   ! ============================================================
+
+   case ("south")
+
+      closed_x(n_coast+1) = coast_x(n_coast)
+      closed_y(n_coast+1) = ymin
+
+      closed_x(n_coast+2) = xmax
+      closed_y(n_coast+2) = ymin
+
+      closed_x(n_coast+3) = coast_x(1)
+      closed_y(n_coast+3) = ymin
+
+      closed_x(n_coast+4) = coast_x(1)
+      closed_y(n_coast+4) = coast_y(1)
+
+   ! ============================================================
+   ! DEFAULT
+   ! ============================================================
+
+   case default
+
+      print *, "ERROR : could not determine closure side"
+      stop
+
+   end select
+
+end subroutine close_coastline
+
 
 end module coast_line
