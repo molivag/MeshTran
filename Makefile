@@ -10,10 +10,12 @@ BIN_DIR = bin
 TARGET = meshTran
 
 # Source files
-SRC = \
-$(SRC_DIR)/mesh_config.f90 \
-$(SRC_DIR)/mesh_entities.f90 \
-$(SRC_DIR)/meshTranFemtic.f90
+# SRC = \
+# $(SRC_DIR)/mesh_config.f90 \
+# $(SRC_DIR)/mesh_entities.f90 \
+# $(SRC_DIR)/meshTranFemtic.f90
+#
+ SRC = $(SRC_DIR)/*.f90
 
 # Flags
 # FFLAGS = -g -traceback -check all -fpe0 -warn all -debug all \
