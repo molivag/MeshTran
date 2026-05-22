@@ -1379,44 +1379,7 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   ! subroutine check_domain(x, y, OBJsettings)!xmin, xmax, ymin, ymax, pad_x, pad_y)
-   !    implicit none
-   !    type(MeshSettings), INTENT(IN) :: OBJsettings
-   !    real(dp), intent(in):: x(:), y(:)
-   !    ! real(dp), intent(in):: xmin, xmax, ymin, ymax, pad_x, pad_y
-   !    real(dp)            :: xminDEM, yminDEM, xmaxDEM, ymaxDEM, dem_size_x, dem_size_y
-   !    real(dp)            :: condition_1, condition_2, condition_3, condition_4, x1, x2, y1, y2
-   !
-   !    xminDEM = minval(x)
-   !    xmaxDEM = maxval(x)
-   !    yminDEM = minval(y)
-   !    ymaxDEM = maxval(y)
-   !    dem_size_x = xmaxDEM - xminDEM
-   !    dem_size_y = ymaxDEM - yminDEM
-   !
-   !    x1 = OBJsettings%xminDOM - OBJsettings%pad_x
-   !    x2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
-   !    y1 = OBJsettings%yminDOM - OBJsettings%pad_y
-   !    y2 = OBJsettings%ymaxDOM + OBJsettings%pad_y
-   !
-   !    print *, 'DEM X range      :', xminDEM, xmaxDEM
-   !    print *, 'DEM Y range      :', yminDEM, ymaxDEM
-   !    print *, 'Domain X (+pad)  :', x1, x2
-   !    print *, 'Domain Y (+pad)  :', y1, y2
-   !    print *, 'DEM size (km)    :', dem_size_x, dem_size_y
-   !
-   !    condition_1 = OBJsettings%xminDOM - OBJsettings%pad_x
-   !    condition_2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
-   !    condition_3 = OBJsettings%yminDOM - OBJsettings%pad_y
-   !    condition_4 = OBJsettings%ymaxDOM + OBJsettings%pad_y
-   !
-   !    if (minval(x) > condition_1 .or. maxval(x) < condition_2) stop 'DEM X does not cover domain+padding'
-   !    if (minval(y) > condition_3 .or. maxval(y) < condition_4) stop 'DEM Y does not cover domain+padding'
-   ! end subroutine
-
-
-!
-subroutine check_domain(x, y, z, n, OBJsettings)
+   subroutine check_domain(x, y, z, n, OBJsettings)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
       real(dp)                       :: dem_size_x, dem_size_y
@@ -1492,25 +1455,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       n = k  ! El nuevo número total de puntos
 
    end subroutine
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 !=========================================================
 !=======
 !=========================================================
@@ -1526,21 +1470,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 !=========================================================
 !=======
 !=========================================================
-! subroutine parse_dms_line(line, value)
-!   character(len=*), intent(in):: line
-!   real(8), intent(out):: value
-
-!   integer:: p_eq, p1, p2
-!   real:: deg, min, sec
-!   character(len = 64):: tmp
-
-!   p_eq = index(line, "=")
-!   tmp = adjustl(line(p_eq+1:))
-
-!   read(tmp, '(f6.0, ":", f6.0, ":")') deg, min
-
-!   value = dms_to_decimal(deg, min, sec)
-! end subroutine
    subroutine parse_ref_value(line, value)
       implicit none
       character(len=*), intent(in)  :: line
@@ -2614,80 +2543,9 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 
    end subroutine write_obs_sites
 
-   ! subroutine setGlobalMeshRefinement(xcenter, ycenter, Nglob_ellipses, corXsite, corYsite, nSites, OBJglobRefi)
-   !
-   !    implicit none
-   !    type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
-   !    integer, intent(in)   :: Nglob_ellipses
-   !    real(dp), intent(in)  :: ycenter, xcenter!, rot_glob
-   !    character(len=512)    :: fname
-   !    real(dp)              :: z0, oblatness_on_ZXplane
-   !    integer               :: iu, i, nSites, k
-   !    ! Parámetros hardcodeados (pueden ser arreglos en el futuro)
-   !    real(dp) :: a(Nglob_ellipses), lengths(Nglob_ellipses), fh(Nglob_ellipses), fvp(Nglob_ellipses), fvm(Nglob_ellipses)
-   !    ! real(dp), intent(in) :: len_alon_x_axis(n_site_ellipses), max_edge_len_within_ellipse(n_site_ellipses)
-   !    real(dp), intent(in) :: corXsite(nSites), corYsite(nSites)
-   !
-   !    z0 = 0.0d0
-   !
-   !    ! Datos del ejemplo del autor
-   !    a = (/40.0, 45.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0/)
-   !    lengths = (/1.0, 1.5, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0, 30.0, 45.0/)
-   !    fh = (/0.5, 0.5, 0.5, 0.3, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0/)
-   !    fvp = (/0.7, 0.5, 0.4, 0.3, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0/)
-   !    fvm = (/0.9, 0.7, 0.7, 0.5, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0/)
-   !
-   !    a = a*1.0d0
-   !
-   !    fname = trim(outdir)//'makeMtr.param'
-   !    open (newunit=iu, file=fname, status='replace', action='write')
-   !
-   !    ! 1. Coordenadas del centro (Y, X, Z)
-   !    write (iu, '(3F12.5)') xcenter, ycenter, z0
-   !
-   !    ! 2. Ángulo de rotación
-   !    write (iu, '(F12.2)') OBJglobRefi%rotation
-   !
    !    ! 3. Número de elipsoides
-   !    ! write (iu, '(I5)') Nglob_ellipses
-   !    write (iu, '(I5)') OBJglobRefi%n_ellipses_site
    !
-   !    ! 4. Bloque de elipsoides
-   !    do i = 1, min(10, 10)
-   !       write (iu, '(F6.1, F6.1, 1x, 3F6.2)') a(i), lengths(i), fh(i), fvp(i), fvm(i)
-   !    end do
-   !
-   !    close (iu)
-   !    print *, 'Archivo makeMtr.param creado exitosamente en ', trim(outdir)
-   !
-   !    oblatness_on_ZXplane = 0.3
-   !
-   !    fname = trim(outdir)//'/obs_site.dat'
-   !    open (newunit=iu, file=fname, status='replace', action='write', form='formatted')
-   !
-   !    ! ======================
-   !    ! Write number of sites
-   !    ! ======================
-   !    write (iu, '(I4)') nSites
-   !
-   !    ! ======================
-   !    ! Write each observation site
-   !    ! ======================
-   !    do i = 1, nSites
-   !       ! X  Y  z0
-   !       write (iu, '(3F15.6 )') corXsite(i), corYsite(i), z0
-   !       write (iu, '(I1)') OBJglobRefi%n_ellipses_site
-   !
-   !       ! (Ri, Li) pairs
-   !       do k = 1, OBJglobRefi%n_ellipses_site
-   !          write (iu, '(3F5.2 )') &
-   !             OBJglobRefi%lenEllipseSite(k), OBJglobRefi%maxSiteEdge(k), oblatness_on_zxplane
-   !       end do
-   !    end do
-   !
-   !    close (iu)
    !    print *, 'Archivo obs_site.dat creado exitosamente en ', trim(outdir)
-   !
    ! end subroutine setGlobalMeshRefinement
 !=========================================================
 !=======
