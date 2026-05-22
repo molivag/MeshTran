@@ -971,10 +971,12 @@ end subroutine surface_ellipsoids
    subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, nDEMpoints)
 
       use mesh_config
+      use coast_line
+
       implicit none
 
       type(MeshSettings), intent(in)      :: OBJsettings
-      type(CoastLine)   , intent(inout)      :: OBJcoastLine
+      type(CoastLine)   , intent(inout)   :: OBJcoastLine
       real(dp), allocatable, intent(out)  :: x(:), y(:), z(:)
       integer, intent(out)                :: nDEMpoints
       integer                            :: iu, i, nCoastLine, k
@@ -1052,8 +1054,10 @@ end subroutine surface_ellipsoids
 
       end select
 
-      ! select case (OBJcoastLine%has_sea)
-      !    case ("yes")
+      select case (OBJcoastLine%has_sea)
+         case ("yes")
+         
+            call extract_coastLine(OBJsettings)
       !
       !       nCoastLine = 0 
       !       do i = 1, size(z, dim=1), 1
@@ -1079,11 +1083,11 @@ end subroutine surface_ellipsoids
       !          endif
       !       end do
       !
-      !    case ("no")
-      !       continue
-      !    case default
-      !       print*, 'DEM have to be specified if has or not Sea'
-      ! end select
+         case ("no")
+            continue
+         case default
+            print*, 'DEM have to be specified if has or not Sea'
+      end select
 
       ! call nearest_neighbor_ordering(OBJcoastLine)
 
