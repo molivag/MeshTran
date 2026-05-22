@@ -815,49 +815,6 @@ end subroutine surface_ellipsoids
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 !    subroutine surface_ellipsoids(x_0, y_0, sitex, sitey, Nsites, OBJsettings, OBJrefiParam, unit)
 !
 !       implicit none
@@ -971,8 +928,7 @@ end subroutine surface_ellipsoids
    subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, nDEMpoints)
 
       use mesh_config
-      use coast_line
-
+      use geo_utils, only:lat_long_to_UTM_km
       implicit none
 
       type(MeshSettings), intent(in)      :: OBJsettings
@@ -1383,44 +1339,7 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   ! subroutine check_domain(x, y, OBJsettings)!xmin, xmax, ymin, ymax, pad_x, pad_y)
-   !    implicit none
-   !    type(MeshSettings), INTENT(IN) :: OBJsettings
-   !    real(dp), intent(in):: x(:), y(:)
-   !    ! real(dp), intent(in):: xmin, xmax, ymin, ymax, pad_x, pad_y
-   !    real(dp)            :: xminDEM, yminDEM, xmaxDEM, ymaxDEM, dem_size_x, dem_size_y
-   !    real(dp)            :: condition_1, condition_2, condition_3, condition_4, x1, x2, y1, y2
-   !
-   !    xminDEM = minval(x)
-   !    xmaxDEM = maxval(x)
-   !    yminDEM = minval(y)
-   !    ymaxDEM = maxval(y)
-   !    dem_size_x = xmaxDEM - xminDEM
-   !    dem_size_y = ymaxDEM - yminDEM
-   !
-   !    x1 = OBJsettings%xminDOM - OBJsettings%pad_x
-   !    x2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
-   !    y1 = OBJsettings%yminDOM - OBJsettings%pad_y
-   !    y2 = OBJsettings%ymaxDOM + OBJsettings%pad_y
-   !
-   !    print *, 'DEM X range      :', xminDEM, xmaxDEM
-   !    print *, 'DEM Y range      :', yminDEM, ymaxDEM
-   !    print *, 'Domain X (+pad)  :', x1, x2
-   !    print *, 'Domain Y (+pad)  :', y1, y2
-   !    print *, 'DEM size (km)    :', dem_size_x, dem_size_y
-   !
-   !    condition_1 = OBJsettings%xminDOM - OBJsettings%pad_x
-   !    condition_2 = OBJsettings%xmaxDOM + OBJsettings%pad_x
-   !    condition_3 = OBJsettings%yminDOM - OBJsettings%pad_y
-   !    condition_4 = OBJsettings%ymaxDOM + OBJsettings%pad_y
-   !
-   !    if (minval(x) > condition_1 .or. maxval(x) < condition_2) stop 'DEM X does not cover domain+padding'
-   !    if (minval(y) > condition_3 .or. maxval(y) < condition_4) stop 'DEM Y does not cover domain+padding'
-   ! end subroutine
-
-
-!
-subroutine check_domain(x, y, z, n, OBJsettings)
+   subroutine check_domain(x, y, z, n, OBJsettings)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
       real(dp)                       :: dem_size_x, dem_size_y
@@ -1496,25 +1415,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
       n = k  ! El nuevo número total de puntos
 
    end subroutine
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 !=========================================================
 !=======
 !=========================================================
@@ -1530,21 +1430,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 !=========================================================
 !=======
 !=========================================================
-! subroutine parse_dms_line(line, value)
-!   character(len=*), intent(in):: line
-!   real(8), intent(out):: value
-
-!   integer:: p_eq, p1, p2
-!   real:: deg, min, sec
-!   character(len = 64):: tmp
-
-!   p_eq = index(line, "=")
-!   tmp = adjustl(line(p_eq+1:))
-
-!   read(tmp, '(f6.0, ":", f6.0, ":")') deg, min
-
-!   value = dms_to_decimal(deg, min, sec)
-! end subroutine
    subroutine parse_ref_value(line, value)
       implicit none
       character(len=*), intent(in)  :: line
@@ -1662,6 +1547,8 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 !=======
 !=========================================================
    subroutine read_edi_files(EDIfiles, n, EDIid, EDIcoordX, EDIcoordY, EDIelev)
+      use geo_utils, only:lat_long_to_UTM_km
+
       implicit none
 
       integer,          intent(in)     :: n
@@ -1739,85 +1626,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 
    end subroutine read_edi_files
 
-!=========================================================
-!=======
-!=========================================================trendline
-   subroutine lat_long_to_UTM_km(lat, lon, n_points, east_km, north_km)
-      ! subroutine lat_long_to_UTM_km(lat, lon, n_points, x, y)
-      implicit none
-      integer, intent(in)     :: n_points
-      real(dp), intent(in)    :: lat(n_points), lon(n_points)             ! grados decimales
-      ! real(dp), intent(out)   :: east_km(n_points), north_km(n_points)    ! ya en kilometros
-      real(dp), allocatable, intent(out)   :: east_km(:), north_km(:)    ! ya en kilometros
-
-      integer:: i, zone
-      real(dp)               :: x(n_points), y(n_points)                 ! metros
-      real(dp):: lon_mean
-
-      ! --- constantes---
-      real(dp), parameter:: semieje = 6378137.0d0
-      real(dp), parameter:: f = 1.0d0/298.257223563d0
-      real(dp), parameter:: k0 = 0.9996d0
-      real(dp), parameter:: pi = 3.141592653589793d0
-
-      real(dp):: e2, ep2
-      real(dp):: latr(n_points), lonr(n_points), lon0r
-      real(dp):: N(n_points), T(n_points), C(n_points), A(n_points), M(n_points)
-      real(dp):: lon0
-
-      ! --- elipsoide---
-      e2 = f*(2.0d0 - f)
-      ep2 = e2/(1.0d0 - e2)
-
-      ! --- zona UTM---
-      lon_mean = sum(lon)/dble(n_points)
-      zone = int((lon_mean + 180.0d0)/6.0d0) + 1
-      lon0 = (zone - 1)*6.0d0 - 180.0d0 + 3.0d0
-
-      do i = 1, n_points
-         ! --- radianes---
-         latr(i) = lat(i)*pi/180.0d0
-         lonr(i) = lon(i)*pi/180.0d0
-         lon0r = lon0*pi/180.0d0
-
-         ! --- términos auxiliares---
-         N(i) = semieje/sqrt(1.0d0 - e2*sin(latr(i))**2)
-         T(i) = tan(latr(i))**2
-         C(i) = ep2*cos(latr(i))**2
-         A(i) = cos(latr(i))*(lonr(i) - lon0r)
-
-         ! --- arco meridional---
-         M(i) = semieje*((1.0d0 - e2/4.0d0 - 3.0d0*e2**2/64.0d0 - 5.0d0*e2**3/256.0d0)*latr(i) &
-                         - (3.0d0*e2/8.0d0 + 3.0d0*e2**2/32.0d0 + 45.0d0*e2**3/1024.0d0)*sin(2.0d0*latr(i)) &
-                         + (15.0d0*e2**2/256.0d0 + 45.0d0*e2**3/1024.0d0)*sin(4.0d0*latr(i)) &
-                         - (35.0d0*e2**3/3072.0d0)*sin(6.0d0*latr(i)))
-
-         ! --- coordenadas UTM---
-         x(i) = k0*N(i)*(A(i) + (1.0d0 - T(i) + C(i))*A(i)**3/6.0d0 &
-                         + (5.0d0 - 18.0d0*T(i) + T(i)**2 + 72.0d0*C(i) - 58.0d0*ep2)*A(i)**5/120.0d0) + 500000.0d0
-
-         y(i) = k0*(M(i) + N(i)*tan(latr(i))*(A(i)**2/2.0d0 &
-                                              + (5.0d0 - T(i) + 9.0d0*C(i) + 4.0d0*C(i)**2)*A(i)**4/24.0d0 &
-                                              + (61.0d0 - 58.0d0*T(i) + T(i)**2 + 600.0d0*C(i) - 330.0d0*ep2)*A(i)**6/720.0d0))
-
-         ! hemisferio sur
-         !to avoind negative coordinates in northing
-         if (lat(i) < 0.0d0) y(i) = y(i) + 10000000.0d0
-      end do
-
-      !Covierto UTM en metros a UTM en kilometros
-      ! x = x/1000.0d0
-      ! y = y/1000.0d0
-      ALLOCATE(east_km(n_points), north_km(n_points))
-
-      north_km = y/1000.0d0    ! Y = Norte
-      east_km = x/1000.0d0    ! X = Este
-
-      !Lo ideal es que esta conversion se haga fuera e la rutina, al igual en read_dem o read_EDIs
-      ! x = north_km   ! X = Norte
-      ! y = east_km    ! Y = Este
-
-   end subroutine lat_long_to_UTM_km
 !=========================================================
 !=======
 !=========================================================
@@ -2184,141 +1992,6 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 !=========================================================
 !=======
 !=========================================================
-   subroutine run_makeTetraMesh_and_assign_regions(OBJmodRegions)
-      implicit none
-
-      type(ModelRegion), INTENT(IN) :: OBJmodRegions
-      ! integer, intent(in) :: N_regions, ID_regions(N_regions)
-      ! real(8), intent(in) :: coord_regions(3, N_regions)
-
-      integer :: stat, iu_in, iu_out, k
-      logical :: ex, found_part4
-      character(len=512) :: line
-
-      ! -----------------------------
-      ! 1. Ir a buildMesh
-      ! -----------------------------
-      ! call execute_command_line('cd buildMesh', wait=.true., exitstat=stat)
-      ! if (stat /= 0) stop 'ERROR: cannot cd to buildMesh'
-
-      ! -----------------------------
-      ! 2. Copiar geometría
-      ! -----------------------------
-      call execute_command_line('echo " "')
-      call execute_command_line('echo "--Running makeTetraMesh..."')
-
-      call execute_command_line('cd preprocessing/buildMesh && cp ../geometry/* .', wait=.true., exitstat=stat)
-      if (stat /= 0) stop 'ERROR: copying geometry failed'
-      call execute_command_line('echo " "')
-
-      ! -----------------------------
-      ! 3. Ejecutar steps 1–4
-      ! -----------------------------
-      call execute_command_line('echo "step 1 --> Defining Land/Sea Boundary"')
-      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 1', wait=.true., exitstat=stat)
-      if (stat /= 0) then
-         error stop 'ERROR: makeTetraMesh step 1 failed'
-      end if
-      call execute_command_line('echo "done..." && sleep 1')
-      print*, ' '
-
-      call execute_command_line('echo "step 2 --> Building 2D mesh..."')
-      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
-      if (stat /= 0) then
-         error stop 'ERROR: makeTetraMesh step 2 failed'
-      end if
-      call execute_command_line('echo "done..." && sleep 1')
-      print*, ' '
-
-      call execute_command_line('echo "step 3 --> Interpolating altitudes"')
-      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
-      if (stat /= 0) then
-         error stop 'ERROR: makeTetraMesh step 3 failed'
-      end if
-      call execute_command_line('echo "done..." && sleep 1')
-      print*, ' '
-
-      call execute_command_line('echo "step 4 --> Making surface mesh"')
-      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
-      if (stat /= 0) then
-         error stop 'ERROR: makeTetraMesh step 4 failed'
-      end if
-      call execute_command_line('echo "done..." && sleep 1')
-
-      ! -----------------------------
-      ! 4. Verificar output.poly
-      ! -----------------------------
-      inquire (file='preprocessing/buildMesh/output.poly', exist=ex)
-      if (.not. ex) stop 'ERROR: output.poly was not generated'
-
-      ! -----------------------------
-      ! 5. Parchear regiones
-      ! -----------------------------
-
-      ! after_part4 = .false.
-      found_part4 = .false.
-
-      call execute_command_line('echo " " ')
-      call execute_command_line('echo "Assigning regions in output.poly file"')
-      open (newunit=iu_in, file='preprocessing/buildMesh/output.poly', status='old')
-      open (newunit=iu_out, file='preprocessing/buildMesh/output.poly.tmp', status='replace')
-
-      !
-      !   read(iu_in, '(A)', end=100) line
-
-      !   write(iu_out, '(A)') trim(line)
-
-      !   if (index(line, '# Part 4') > 0) then
-      !     read(iu_in, '(A)') line   ! esta es la línea "0"
-      !     write(iu_out, '(I0)') 2   ! número de regiones
-
-      !     ! ---- REGIONES ----
-      !     do k =1,Nregions
-      !       write(iu_out,'(I3,3F10.3,I4,1PE12.4)') k , coord_regions(:,k) , ID_regions(k), 1.0e9
-      !     enddo
-      !   else
-      !     write(*,*) ' There is no #Part 4 content on output.poly where it assign regions'
-      !     write(*,*) 'Aborting tetgen execution'
-      !     stop
-      !   end if
-      ! end do
-
-      do
-         read (iu_in, '(A)', end=100) line
-
-         write (iu_out, '(A)') trim(line)
-
-         if (index(line, '# Part 4') > 0) then
-            found_part4 = .true.
-
-            read (iu_in, '(A)') line   ! leer el "0"
-            write (iu_out, '(I0)') OBJmodRegions%Nregions
-
-            do k = 1, OBJmodRegions%Nregions
-               write (iu_out, '(I3,3F10.3,I4,1PE12.4)') k, OBJmodRegions%coord(:, k), OBJmodRegions%ID(k), OBJmodRegions%rho(k)
-            end do
-         end if
-
-      end do
-
-100   continue
-
-      if (.not. found_part4) then
-         write (*, *) 'There is no # Part 4 section in output.poly'
-         error stop
-      end if
-
-      close (iu_in)
-      close (iu_out)
-
-      call execute_command_line('mv preprocessing/buildMesh/output.poly.tmp preprocessing/buildMesh/output.poly')
-
-      write (*, *) 'Ok: ✅ makeTetraMesh steps 1–4 done and regions added to output.poly'
-
-   end subroutine run_makeTetraMesh_and_assign_regions
-!=========================================================
-!=======
-!=========================================================
    pure real(dp) function skin_depth_km(rho_ohmm, f_hz) result(delta)
       real(dp), intent(in) :: rho_ohmm, f_hz
 
@@ -2618,80 +2291,9 @@ subroutine check_domain(x, y, z, n, OBJsettings)
 
    end subroutine write_obs_sites
 
-   ! subroutine setGlobalMeshRefinement(xcenter, ycenter, Nglob_ellipses, corXsite, corYsite, nSites, OBJglobRefi)
-   !
-   !    implicit none
-   !    type(GlobalRefinement), INTENT(INOUT) :: OBJglobRefi
-   !    integer, intent(in)   :: Nglob_ellipses
-   !    real(dp), intent(in)  :: ycenter, xcenter!, rot_glob
-   !    character(len=512)    :: fname
-   !    real(dp)              :: z0, oblatness_on_ZXplane
-   !    integer               :: iu, i, nSites, k
-   !    ! Parámetros hardcodeados (pueden ser arreglos en el futuro)
-   !    real(dp) :: a(Nglob_ellipses), lengths(Nglob_ellipses), fh(Nglob_ellipses), fvp(Nglob_ellipses), fvm(Nglob_ellipses)
-   !    ! real(dp), intent(in) :: len_alon_x_axis(n_site_ellipses), max_edge_len_within_ellipse(n_site_ellipses)
-   !    real(dp), intent(in) :: corXsite(nSites), corYsite(nSites)
-   !
-   !    z0 = 0.0d0
-   !
-   !    ! Datos del ejemplo del autor
-   !    a = (/40.0, 45.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0/)
-   !    lengths = (/1.0, 1.5, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0, 30.0, 45.0/)
-   !    fh = (/0.5, 0.5, 0.5, 0.3, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0/)
-   !    fvp = (/0.7, 0.5, 0.4, 0.3, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0/)
-   !    fvm = (/0.9, 0.7, 0.7, 0.5, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0/)
-   !
-   !    a = a*1.0d0
-   !
-   !    fname = trim(outdir)//'makeMtr.param'
-   !    open (newunit=iu, file=fname, status='replace', action='write')
-   !
-   !    ! 1. Coordenadas del centro (Y, X, Z)
-   !    write (iu, '(3F12.5)') xcenter, ycenter, z0
-   !
-   !    ! 2. Ángulo de rotación
-   !    write (iu, '(F12.2)') OBJglobRefi%rotation
-   !
    !    ! 3. Número de elipsoides
-   !    ! write (iu, '(I5)') Nglob_ellipses
-   !    write (iu, '(I5)') OBJglobRefi%n_ellipses_site
    !
-   !    ! 4. Bloque de elipsoides
-   !    do i = 1, min(10, 10)
-   !       write (iu, '(F6.1, F6.1, 1x, 3F6.2)') a(i), lengths(i), fh(i), fvp(i), fvm(i)
-   !    end do
-   !
-   !    close (iu)
-   !    print *, 'Archivo makeMtr.param creado exitosamente en ', trim(outdir)
-   !
-   !    oblatness_on_ZXplane = 0.3
-   !
-   !    fname = trim(outdir)//'/obs_site.dat'
-   !    open (newunit=iu, file=fname, status='replace', action='write', form='formatted')
-   !
-   !    ! ======================
-   !    ! Write number of sites
-   !    ! ======================
-   !    write (iu, '(I4)') nSites
-   !
-   !    ! ======================
-   !    ! Write each observation site
-   !    ! ======================
-   !    do i = 1, nSites
-   !       ! X  Y  z0
-   !       write (iu, '(3F15.6 )') corXsite(i), corYsite(i), z0
-   !       write (iu, '(I1)') OBJglobRefi%n_ellipses_site
-   !
-   !       ! (Ri, Li) pairs
-   !       do k = 1, OBJglobRefi%n_ellipses_site
-   !          write (iu, '(3F5.2 )') &
-   !             OBJglobRefi%lenEllipseSite(k), OBJglobRefi%maxSiteEdge(k), oblatness_on_zxplane
-   !       end do
-   !    end do
-   !
-   !    close (iu)
    !    print *, 'Archivo obs_site.dat creado exitosamente en ', trim(outdir)
-   !
    ! end subroutine setGlobalMeshRefinement
 !=========================================================
 !=======
@@ -3104,6 +2706,141 @@ subroutine check_domain(x, y, z, n, OBJsettings)
    !    print *, 'Created: ', trim(ele_out)
    !
    ! end subroutine reindex_tetgen_files
+!=========================================================
+!=======
+!=========================================================
+   subroutine run_makeTetraMesh_and_assign_regions(OBJmodRegions)
+      implicit none
+
+      type(ModelRegion), INTENT(IN) :: OBJmodRegions
+      ! integer, intent(in) :: N_regions, ID_regions(N_regions)
+      ! real(8), intent(in) :: coord_regions(3, N_regions)
+
+      integer :: stat, iu_in, iu_out, k
+      logical :: ex, found_part4
+      character(len=512) :: line
+
+      ! -----------------------------
+      ! 1. Ir a buildMesh
+      ! -----------------------------
+      ! call execute_command_line('cd buildMesh', wait=.true., exitstat=stat)
+      ! if (stat /= 0) stop 'ERROR: cannot cd to buildMesh'
+
+      ! -----------------------------
+      ! 2. Copiar geometría
+      ! -----------------------------
+      call execute_command_line('echo " "')
+      call execute_command_line('echo "--Running makeTetraMesh..."')
+
+      call execute_command_line('cd preprocessing/buildMesh && cp ../geometry/* .', wait=.true., exitstat=stat)
+      if (stat /= 0) stop 'ERROR: copying geometry failed'
+      call execute_command_line('echo " "')
+
+      ! -----------------------------
+      ! 3. Ejecutar steps 1–4
+      ! -----------------------------
+      call execute_command_line('echo "step 1 --> Defining Land/Sea Boundary"')
+      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 1', wait=.true., exitstat=stat)
+      if (stat /= 0) then
+         error stop 'ERROR: makeTetraMesh step 1 failed'
+      end if
+      call execute_command_line('echo "done..." && sleep 1')
+      print*, ' '
+
+      call execute_command_line('echo "step 2 --> Building 2D mesh..."')
+      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
+      if (stat /= 0) then
+         error stop 'ERROR: makeTetraMesh step 2 failed'
+      end if
+      call execute_command_line('echo "done..." && sleep 1')
+      print*, ' '
+
+      call execute_command_line('echo "step 3 --> Interpolating altitudes"')
+      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
+      if (stat /= 0) then
+         error stop 'ERROR: makeTetraMesh step 3 failed'
+      end if
+      call execute_command_line('echo "done..." && sleep 1')
+      print*, ' '
+
+      call execute_command_line('echo "step 4 --> Making surface mesh"')
+      call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
+      if (stat /= 0) then
+         error stop 'ERROR: makeTetraMesh step 4 failed'
+      end if
+      call execute_command_line('echo "done..." && sleep 1')
+
+      ! -----------------------------
+      ! 4. Verificar output.poly
+      ! -----------------------------
+      inquire (file='preprocessing/buildMesh/output.poly', exist=ex)
+      if (.not. ex) stop 'ERROR: output.poly was not generated'
+
+      ! -----------------------------
+      ! 5. Parchear regiones
+      ! -----------------------------
+
+      ! after_part4 = .false.
+      found_part4 = .false.
+
+      call execute_command_line('echo " " ')
+      call execute_command_line('echo "Assigning regions in output.poly file"')
+      open (newunit=iu_in, file='preprocessing/buildMesh/output.poly', status='old')
+      open (newunit=iu_out, file='preprocessing/buildMesh/output.poly.tmp', status='replace')
+
+      !
+      !   read(iu_in, '(A)', end=100) line
+
+      !   write(iu_out, '(A)') trim(line)
+
+      !   if (index(line, '# Part 4') > 0) then
+      !     read(iu_in, '(A)') line   ! esta es la línea "0"
+      !     write(iu_out, '(I0)') 2   ! número de regiones
+
+      !     ! ---- REGIONES ----
+      !     do k =1,Nregions
+      !       write(iu_out,'(I3,3F10.3,I4,1PE12.4)') k , coord_regions(:,k) , ID_regions(k), 1.0e9
+      !     enddo
+      !   else
+      !     write(*,*) ' There is no #Part 4 content on output.poly where it assign regions'
+      !     write(*,*) 'Aborting tetgen execution'
+      !     stop
+      !   end if
+      ! end do
+
+      do
+         read (iu_in, '(A)', end=100) line
+
+         write (iu_out, '(A)') trim(line)
+
+         if (index(line, '# Part 4') > 0) then
+            found_part4 = .true.
+
+            read (iu_in, '(A)') line   ! leer el "0"
+            write (iu_out, '(I0)') OBJmodRegions%Nregions
+
+            do k = 1, OBJmodRegions%Nregions
+               write (iu_out, '(I3,3F10.3,I4,1PE12.4)') k, OBJmodRegions%coord(:, k), OBJmodRegions%ID(k), OBJmodRegions%rho(k)
+            end do
+         end if
+
+      end do
+
+100   continue
+
+      if (.not. found_part4) then
+         write (*, *) 'There is no # Part 4 section in output.poly'
+         error stop
+      end if
+
+      close (iu_in)
+      close (iu_out)
+
+      call execute_command_line('mv preprocessing/buildMesh/output.poly.tmp preprocessing/buildMesh/output.poly')
+
+      write (*, *) 'Ok: ✅ makeTetraMesh steps 1–4 done and regions added to output.poly'
+
+   end subroutine run_makeTetraMesh_and_assign_regions
 !=========================================================
 !=======
 !=========================================================
