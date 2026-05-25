@@ -16,7 +16,7 @@ program femtic_mesh_driver
    real(dp)::  x0, y0, z0
    ! DEM data
    integer:: n_dem, n_edi_files, n_sites
-   real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:), fix_elev_site(:)
+   real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:)
 
    !---------------------------------------------------
    !     Read input configutation file
@@ -588,8 +588,7 @@ contains
 
    end subroutine convert_EDI_file_units
 !=========================================================
-!=======
-!=========================================================
+!===========================================================
    subroutine apply_error_floor(nf, zr, zi, SD, zerr)
       integer, intent(in) :: nf
       real(dp), intent(in) :: zr(nf, 4), zi(nf, 4), SD(nf, 4)
@@ -928,14 +927,18 @@ end subroutine surface_ellipsoids
    subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, nDEMpoints)
 
       use mesh_config
-      use geo_utils, only:lat_long_to_UTM_km
+      use geo_utils, only: lat_long_to_UTM_km
+      ! use coast_line, only: coastLine_generation
+      use class_CoastLine
       implicit none
+
+      type(Coast_Line) :: CoastLineOBJ
 
       type(MeshSettings), intent(in)      :: OBJsettings
       type(CoastLine)   , intent(inout)   :: OBJcoastLine
       real(dp), allocatable, intent(out)  :: x(:), y(:), z(:)
       integer, intent(out)                :: nDEMpoints
-      integer                            :: iu, i, nCoastLine, k
+      integer                            :: iu, i
       real(dp)                           :: xx, yy, zz, longg, latt, elevv
       real(dp), ALLOCATABLE              :: east_km(:), north_km(:)
       real(dp), ALLOCATABLE              :: long(:), lat(:), elev(:)
@@ -965,7 +968,7 @@ end subroutine surface_ellipsoids
             call lat_long_to_UTM_km(lat, long, nDEMpoints, east_km, north_km)
          
             allocate (x(nDEMpoints), y(nDEMpoints), z(nDEMpoints))
-            !here we set the convention of north pointing to north
+            !here we set the convention of MT where x points to north
             x = north_km
             y = east_km
             z = elev * 1.0d-3
@@ -1010,10 +1013,18 @@ end subroutine surface_ellipsoids
 
       end select
 
+      open(newunit=iu, file='./preprocessing/DEM/UTM_'//OBJsettings%dem_file, status='replace')
+      do i = 1, nDEMpoints
+         write(iu,*) x(i), y(i), z(i)
+      end do
+
+      close(iu)
+
       select case (OBJcoastLine%has_sea)
          case ("yes")
          
-            call extract_coastLine(OBJsettings)
+      ! call coastLine_generation(OBJsettings)
+         call CoastLineOBJ%generate(OBJsettings,x, y, z,n_dem)
       !
       !       nCoastLine = 0 
       !       do i = 1, size(z, dim=1), 1
@@ -1046,6 +1057,7 @@ end subroutine surface_ellipsoids
       end select
 
       ! call nearest_neighbor_ordering(OBJcoastLine)
+      pause
 
    end subroutine read_dem
 !=========================================================
@@ -1115,7 +1127,7 @@ end subroutine surface_ellipsoids
       implicit none
 
       type(CoastLine)   , intent(inout)      :: OBJcoastLine
-      logical :: used(OBJcoastLine%nPoints)
+      ! logical :: used(OBJcoastLine%nPoints)
       real(dp), dimension (:), allocatable :: distance, orderedX, orderedY
 
       real(dp) :: start
@@ -1160,10 +1172,8 @@ end subroutine surface_ellipsoids
                distance(i) = huge(1.0_dp)
             else
                distance(i) = SQRT(&
-               ( coast_line%x(i) - coast_line%x(current) )**2 &
-               + &
-               ( coast_line%y(i) - coast_line%y(current) )**2 &
-               )
+               ( coast_line%x(i) - coast_line%x(current) )**2 + &
+               ( coast_line%y(i) - coast_line%y(current) )**2 )
             end if
 
          
@@ -1182,7 +1192,7 @@ end subroutine surface_ellipsoids
          ! print'(4(1x, f15.5))', orderedX(i), coast_line%x(i),  orderedY(i), coast_line%y(i)
       ! enddo
 
-      call debug_coastline(orderedX, orderedY, OBJcoastLine%nPoints)
+      ! call debug_coastline(orderedX, orderedY, OBJcoastLine%nPoints)
 
    end subroutine nearest_neighbor_ordering
 !=========================================================
@@ -1851,7 +1861,7 @@ end subroutine surface_ellipsoids
       real(dp), intent(in):: x(:), y(:), z(:)
       ! real(dp), INTENT(INOUT) :: z(:)
       integer, intent(in):: n
-      integer:: i, j, iu
+      integer:: iu, j
 
       ! z = z/1000.0d0
 
@@ -1882,7 +1892,7 @@ end subroutine surface_ellipsoids
       real(dp), dimension(:,:), allocatable  :: simplified_curve
       real(dp), dimension(2)                 :: p1_ext, pn_ext
       integer:: iu, npoint_simple, npts 
-      integer :: i , j
+      integer :: i 
 
       ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
       ! xmax = OBJsettings%xmaxDOM + OBJsettings%pad_x
