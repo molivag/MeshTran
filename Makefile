@@ -14,6 +14,7 @@ SRC = \
 $(SRC_DIR)/mesh_config.f90 \
 $(SRC_DIR)/mesh_entities.f90 \
 $(SRC_DIR)/geo_utils.f90 \
+$(SRC_DIR)/class_CoastLine.f90 \
 $(SRC_DIR)/meshTranFemtic.f90
 #
 
