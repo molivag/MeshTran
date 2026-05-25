@@ -1276,69 +1276,6 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine debug_coastline(orderedX, orderedY, n)
-
-      implicit none
-
-      integer, intent(in) :: n
-      real(8), intent(in) :: orderedX(n)
-      real(8), intent(in) :: orderedY(n)
-
-      integer :: i, stat
-      character(len=10) :: answer
-      character(len=256) :: cmd
-
-      !----------------------------------------
-      ! write temporary coastline
-      !----------------------------------------
-
-      open(unit=99, file='./preprocessing/geometry/coast_debug.xy', status='replace')
-
-      do i = 1, n
-         write(99,*) orderedX(i), orderedY(i)
-      end do
-
-      close(99)
-
-      !----------------------------------------
-      ! launch gnuplot
-      !----------------------------------------
-
-
-      ! write (cmd, '(A)') gnuplot -persist -e 'plot "coast_debug.dat" w lp' '
-      ! write(cmd,'(A)') 'gnuplot -persist -e "plot ''coast_debug.xy'' w lp"'
-      write(cmd,'(A)') 'gnuplot -persist -e "plot ''./preprocessing/geometry/coastline_simplified.dat'' w lp"'
-         call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
-         if (stat /= 0) error stop 'ERROR executing gnuplot'
-
-      ! call execute_command_line( &
-      ! "gnuplot -persist -e " &
-      ! // 'set title ''MeshTran CoastLine Debug''; ' &
-      ! // 'set size ratio -1; ' &
-      ! // 'plot ''coast_debug.xy'' w lp pt 7 lw 2' &
-      ! // '" '&
-      ! )
-      !
-      !----------------------------------------
-      ! ask user validation
-      !----------------------------------------
-
-      print *
-      print *, 'Is coastline correct? (yes/no)'
-      read(*,*) answer
-
-      if (trim(adjustl(answer)) /= 'yes') then
-
-         print *
-         print *, 'ERROR: coastline validation failed'
-         stop
-
-      end if
-
-   end subroutine
-!=========================================================
-!=======
-!=========================================================
    subroutine check_domain(x, y, z, n, OBJsettings)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
