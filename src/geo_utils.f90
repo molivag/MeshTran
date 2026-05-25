@@ -97,14 +97,16 @@ module geo_utils
       real(8), intent(in) :: orderedY(n)
 
       integer :: i, stat
-      character(len=10) :: answer
+      character(len=20) :: answer, filename
       character(len=256) :: cmd
-
+      character(len=1) :: q
+      q = "'"
       !----------------------------------------
       ! write temporary coastline
       !----------------------------------------
 
-      open(unit=99, file='./preprocessing/geometry/coast_debug.xy', status='replace')
+      filename = "coast_debug.xyz"
+      open(unit=99, file='./preprocessing/geometry/'//trim(filename), status='replace')
 
       do i = 1, n
          write(99,*) orderedX(i), orderedY(i)
@@ -116,11 +118,24 @@ module geo_utils
       ! launch gnuplot
       !----------------------------------------
 
+      
+      write(cmd,'(A)') &
+      'gnuplot -persist -e " ' // &
+      'set size ratio -1; ' // &
+      'plot ' // &
+      q // './preprocessing/DEM/UTM_gebco.xyz' // q // &
+      ' u 2:1:3 w dots palette notitle, ' // &
+      q // './preprocessing/geometry/coast_debug.xyz' // q // &
+      ' u 2:1 w lp lw 1 lc rgb ' // q // 'black' // q // ' title ' // q // 'Closed Coast' // q // &
+      '"'
 
+call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
       ! write (cmd, '(A)') gnuplot -persist -e 'plot "coast_debug.dat" w lp' '
       ! write(cmd,'(A)') 'gnuplot -persist -e "plot ''coast_debug.xy'' w lp"'
-      write(cmd,'(A)') 'gnuplot -persist -e "plot ''./preprocessing/geometry/coastline_simplified.dat'' w lp"'
-         call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+      ! write(cmd,'(A)') 'gnuplot -persist -e "plot './preprocessing/geometry/'//trim(filename)" w lp"'
+
+! write(cmd,'(A)') 'gnuplot -persist -e "plot ' // q //'./preprocessing/geometry/' // trim(filename) // q // ' w lp"'
+         ! call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR executing gnuplot'
 
       ! call execute_command_line( &
