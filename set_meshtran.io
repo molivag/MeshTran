@@ -8,28 +8,29 @@
 MESH_NATURE = native
 THREADS = 18
 
-DEM_FILE = MET_50m_mosaic_valles_Lcosta_cropped.xyz
-__DEM_FILE = TOTPO_KAL_BBMT_FLAT_475m.xyz
-DEM_LatLon = no 
+__DEM_FILE = MET_50m_mosaic_valles_Lcosta_cropped.xyz
+DEM_FILE = gebco.xyz
+DEM_LatLon = yes 
 DEM_UNITS = meters                    !meters or kilometers
 assumming elevation in meters
+HAS_SEA = yes
+SEA_LEVEL = 0.0
+
 
 TOPO_FILE = topography_for.dat 
 BATHY_FILE = bathymetry_for.dat
 COSLI_FILE = coast_line.dat
 
-XMIN_DOM = -32.0
-XMAX_DOM =  20.0
-YMIN_DOM = -25.0
-YMAX_DOM =  30.0
-ZMIN_DOM = -50.0
-ZMAX_DOM =  50.0
+XMIN_DOM = -200.0
+XMAX_DOM =  200.0
+YMIN_DOM = -200.0
+YMAX_DOM =  200.0
+ZMIN_DOM = -100.0
+ZMAX_DOM =  300.0
 
 PAD_X = 5.0
 PAD_Y = 5.0
 
-HAS_SEA = yes
-SEA_LEVEL = 0.0
 
 ## =>  Observation data
 IN_diag_ERR = 0.10
