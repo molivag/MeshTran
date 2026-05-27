@@ -50,13 +50,15 @@ program femtic_mesh_driver
    ALLOCATE (site_x_km(n_edi_files), site_y_km(n_edi_files), site_z_km(n_edi_files))
 
    ! print'(A,f15.5)', "Esto es ----> dem_z:", dem_z(9)
-   !Here it is obtained the coordinates of EDIS from raw (LatLong) to UTM km
+   !---------------------------------------------------
+   !       Converting EDI's from latlong to UTM in Km 
+   !---------------------------------------------------
    call read_edi_files(edi_files, n_edi_files, edi_id, site_x, site_y, edi_elev)
    ! print*, "METROS Esto es coord UTM EDi fIles"
    ! print'(4(F15.5))', site_x(1), site_y(1), edi_elev(1), EDI_elev(1) / 1.0d3
 
    !---------------------------------------------------
-   !     Convert Lat-Long to UTm
+   !     Write DEM and Sites in UTM
    !---------------------------------------------------
    call write_dem_sites_utm(edi_id, site_x, site_y, n_edi_files, dem_x, &
                             dem_y, dem_z, n_dem, site_x_km, site_y_km, dem_x_km, dem_y_km)
@@ -133,6 +135,7 @@ program femtic_mesh_driver
    ! print'(A50,F15.5)', 'Esto es fix_elev_site antes de resistivity_attribute', fix_elev_site(1)
    call resistivitty_attribute(n_sites, site_x_km, site_y_km, site_z_km, settings, globRefi, regions)
 
+   stop
    call run_makeTetraMesh_and_assign_regions(regions)
    call run_TETGEN_and_refine_mesh(globRefi)
    call run_TetGen2Femtic(settings, globRefi)
@@ -926,7 +929,7 @@ end subroutine surface_ellipsoids
    subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, nDEMpoints)
 
       use mesh_config
-      use geo_utils, only: lat_long_to_UTM_km
+      use geo_utils, only: lat_long_to_UTM_km, debug_coastline
       ! use coast_line, only: coastLine_generation
       use class_CoastLine
       implicit none
@@ -1014,7 +1017,7 @@ end subroutine surface_ellipsoids
 
       open(newunit=iu, file='./preprocessing/DEM/UTM_'//OBJsettings%dem_file, status='replace')
       do i = 1, nDEMpoints
-         write(iu,*) x(i), y(i), z(i)
+         write(iu,*) east_km(i), north_km(i), z(i)
       end do
 
       close(iu)
@@ -1022,8 +1025,11 @@ end subroutine surface_ellipsoids
       select case (OBJcoastLine%has_sea)
          case ("yes")
          
-      ! call coastLine_generation(OBJsettings)
+         !Calling the object CoastLineOBJ to generate the Coast Line polygon in UTM x = north
          call CoastLineOBJ%generate(OBJsettings,x, y, z,n_dem)
+
+         pause
+         call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
       !
       !       nCoastLine = 0 
       !       do i = 1, size(z, dim=1), 1
@@ -1056,7 +1062,8 @@ end subroutine surface_ellipsoids
       end select
 
       ! call nearest_neighbor_ordering(OBJcoastLine)
-      pause
+
+      !At the end of this routine, the DEM and Coast Line are in KM UTM and both x points to North
 
    end subroutine read_dem
 !=========================================================
@@ -1551,7 +1558,7 @@ end subroutine surface_ellipsoids
                ! print*,EDIlat
             end if
 
-            if (index(line, 'LON=') > 0) then
+            if (index(line, 'LONG=') > 0) then
             ! if (index(line, 'REFLONG=') > 0) then
                call parse_ref_value(line, EDIlong(i))
                found_lon = .true.
