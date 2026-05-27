@@ -13,7 +13,7 @@ program femtic_mesh_driver
    ! Control parameters
    character(len=256), allocatable:: edi_files(:), edi_id(:)
    real(dp), allocatable, dimension(:) :: edi_elev, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km
-   real(dp)::  x0, y0, z0
+   real(dp)::  x0, y0
    ! DEM data
    integer:: n_dem, n_edi_files, n_sites
    real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:)
@@ -63,11 +63,11 @@ program femtic_mesh_driver
 
    dem_x_km = dem_x
    dem_y_km = dem_y
-   dem_z_km = dem_z*1.0d-3
+   dem_z_km = dem_z
 
    site_x_km = site_x
    site_y_km = site_y
-   site_z_km = edi_elev*1.0d-3
+   site_z_km = edi_elev
 
    ! print *, ' '
    ! print *, '  - -  - - - -  -- - - - - - - -  - - - - - - - - - - - - - '
@@ -88,14 +88,13 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Compute anchor point (central point) of analysis domain based on sites locations
    !---------------------------------------------------
-   call compute_center(site_x_km, site_y_km, site_z_km, n_edi_files, x0, y0, z0)
+   call compute_center(site_x_km, site_y_km, n_edi_files, x0, y0)
    print'(A,f15.5)', "this is x0: ", x0
    print'(A,f15.5)', "this is y0: ", y0
-   print'(A,f15.5)', "this is z0: ", z0
    !---------------------------------------------------
    !     Recenter
    !---------------------------------------------------
-   call recenter_all(n_edi_files, n_dem, x0, y0, z0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
+   call recenter_all(n_edi_files, n_dem, x0, y0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
 
    print*, "METROS Esto es DEM in UTM despues de CENTRAR"
    print'(4(F15.5))', dem_x_km(1), dem_y_km(1), dem_z_km(1)
@@ -1295,8 +1294,8 @@ end subroutine surface_ellipsoids
 
       real(dp) :: xminDEM, xmaxDEM, yminDEM, ymaxDEM
       real(dp) :: x_ext, y_ext, x1, x2, y1, y2
-      real(dp), allocatable :: x_tmp(:), y_tmp(:), z_tmp(:)
-      integer  :: i, j, k, nx_pad, ny_pad, n_total
+      real(dp), allocatable :: x_tmp(:), y_tmp(:), z_tmp(:), z_border_mean
+      integer  :: i, j, k, nx_pad, ny_pad, n_total, n_border
 
       ! 1. Guardamos límites del DEM real
       xminDEM = minval(x); xmaxDEM = maxval(x)
@@ -1315,6 +1314,20 @@ end subroutine surface_ellipsoids
       ymaxDEM = maxval(y)
       dem_size_x = xmaxDEM - xminDEM
       dem_size_y = ymaxDEM - yminDEM
+
+      ! --- CALCULAR ELEVACIÓN MEDIA DEL BORDE DEL DEM ---  ! <-- NUEVO
+      z_border_mean = 0.0_dp                                 ! <-- NUEVO
+      n_border = 0                                           ! <-- NUEVO
+      do i = 1, n                                            ! <-- NUEVO
+         if (x(i) <= xminDEM .or. x(i) >= xmaxDEM .or. &   ! <-- NUEVO
+             y(i) <= yminDEM .or. y(i) >= ymaxDEM) then     ! <-- NUEVO
+            z_border_mean = z_border_mean + z(i)            ! <-- NUEVO
+            n_border = n_border + 1                         ! <-- NUEVO
+         end if                                             ! <-- NUEVO
+      end do                                                ! <-- NUEVO
+      if (n_border > 0) z_border_mean = z_border_mean / n_border ! <-- NUEVO
+      print *, 'Border mean elev :', z_border_mean, '(', n_border, 'pts)' ! <-- NUEVO
+      ! ---------------------------------------------------  ! <-- NUEVO
 
       print *, 'DEM X range      :', xminDEM, xmaxDEM
       print *, 'DEM Y range      :', yminDEM, ymaxDEM
@@ -1350,7 +1363,7 @@ end subroutine surface_ellipsoids
                 k = k + 1
                 x_tmp(k) = x_ext
                 y_tmp(k) = y_ext
-                z_tmp(k) = 0.0_dp  ! <--- ELEVACIÓN ARTIFICIAL (Padding)
+                z_tmp(k) = z_border_mean  ! <--- ELEVACIÓN ARTIFICIAL (Padding)
             end if
          end do
       end do
@@ -1538,7 +1551,7 @@ end subroutine surface_ellipsoids
                ! print*,EDIlat
             end if
 
-            if (index(line, 'LONG=') > 0) then
+            if (index(line, 'LON=') > 0) then
             ! if (index(line, 'REFLONG=') > 0) then
                call parse_ref_value(line, EDIlong(i))
                found_lon = .true.
@@ -1569,6 +1582,7 @@ end subroutine surface_ellipsoids
       !here we set the convention of north pointing to north
       EDIcoordX = north_km
       EDIcoordY = east_km
+      EDIelev   = EDIelev * 1.0d-3
 
 
    end subroutine read_edi_files
@@ -1576,17 +1590,19 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine compute_center(x, y, z, n, xCenter, yCenter, zCenter)
-      integer, intent(in)  :: n
-      real(dp), intent(in)  :: x(n), y(n), z(n)
-      real(dp), intent(out):: xCenter, yCenter, zCenter
+   subroutine compute_center(site_km_x, site_km_y, nEdiFiles, xCenter, yCenter) 
+      integer, intent(in)  :: nEdiFiles
+      real(dp), intent(in)  :: site_km_x(nEdiFiles), site_km_y(nEdiFiles)
+      real(dp), intent(out):: xCenter, yCenter
 
       ! print*, ' '
       ! print'(A,F15.5)', "Esto es Z en compute_center", z(2)
       ! print*, ' '
-      xCenter = sum(x)/dble(n)
-      yCenter = sum(y)/dble(n)
-      zCenter = sum(z)/dble(n)
+
+      xCenter = sum(site_km_x)/dble(nEdiFiles)
+      yCenter = sum(site_km_y)/dble(nEdiFiles)
+      ! zCenter = sum(z)/dble(n)
+
       ! print*, ' '
       ! ! print*, 'Esto es zCenter' 
       ! print*, zCenter
@@ -1594,12 +1610,11 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine recenter_all(Nsites, nDEM, xCenter, yCenter, zCenter, siteCord_x, siteCord_y, siteCord_z, demx, demY, demZ)
+   subroutine recenter_all(Nsites, nDEM, xCenter, yCenter, siteCord_x, siteCord_y, siteCord_z, demx, demY, demZ)
       integer, intent(in)    :: Nsites, nDEM
-      real(dp), intent(in)    :: xCenter, yCenter, zCenter
+      real(dp), intent(in)    :: xCenter, yCenter
       real(dp), intent(inout):: siteCord_x(Nsites), siteCord_y(Nsites), siteCord_z(Nsites)
       real(dp), intent(inout):: demX(nDEM), demY(nDEM), demZ(nDEM)
-      integer :: i
 
       ! siteCord_z = siteCord_z + 10d0
       ! print*,"Esto es antes de recentrar"
@@ -1611,20 +1626,20 @@ end subroutine surface_ellipsoids
 
       siteCord_x(:) = siteCord_x(:) - xCenter
       siteCord_y(:) = siteCord_y(:) - yCenter
-      siteCord_z(:) = siteCord_z(:) - zCenter
+      siteCord_z(:) = siteCord_z(:) !- zCenter
 
 
       demX(:) = demX(:) - xCenter
       demY(:) = demY(:) - yCenter
-      demZ(:) = demZ(:) - zCenter
+      demZ(:) = demZ(:)! - zCenter
 
-      do i = 1, nDEM
-         if (abs(demZ(i)) < 1.0d-17) demZ(i) = 0.0d0
-      end do
-
-      do i = 1, Nsites
-         if (abs(siteCord_z(i)) < 1.0d-17) siteCord_z(i) = 0.0d0
-      end do
+      ! do i = 1, nDEM
+      !    if (abs(demZ(i)) < 1.0d-17) demZ(i) = 0.0d0
+      ! end do
+      !
+      ! do i = 1, Nsites
+      !    if (abs(siteCord_z(i)) < 1.0d-17) siteCord_z(i) = 0.0d0
+      ! end do
 
       ! print*,'Esto es siteCord_z en recenter_all despues de recentrar'
       ! print *,  siteCord_z
@@ -1861,7 +1876,7 @@ end subroutine surface_ellipsoids
       real(dp), intent(in):: x(:), y(:), z(:)
       ! real(dp), INTENT(INOUT) :: z(:)
       integer, intent(in):: n
-      integer:: iu, j
+      integer:: j, iu
 
       ! z = z/1000.0d0
 
@@ -1892,7 +1907,7 @@ end subroutine surface_ellipsoids
       real(dp), dimension(:,:), allocatable  :: simplified_curve
       real(dp), dimension(2)                 :: p1_ext, pn_ext
       integer:: iu, npoint_simple, npts 
-      integer :: i 
+      integer :: i
 
       ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
       ! xmax = OBJsettings%xmaxDOM + OBJsettings%pad_x
