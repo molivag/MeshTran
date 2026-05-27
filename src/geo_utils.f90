@@ -88,13 +88,16 @@ module geo_utils
 !=========================================================
 !=======
 !=========================================================
-   subroutine debug_coastline(orderedX, orderedY, n)
+   subroutine debug_coastline(east, north, n)
+      !
+      ! This routine receive a east and north variables in km UTM to plot the DEM and Coast Line together
+      !
 
       implicit none
 
       integer, intent(in) :: n
-      real(8), intent(in) :: orderedX(n)
-      real(8), intent(in) :: orderedY(n)
+      real(8), intent(in) :: east(n)
+      real(8), intent(in) :: north(n)
 
       integer :: i, stat
       character(len=20) :: answer, filename
@@ -109,7 +112,7 @@ module geo_utils
       open(unit=99, file='./preprocessing/geometry/'//trim(filename), status='replace')
 
       do i = 1, n
-         write(99,*) orderedX(i), orderedY(i)
+         write(99,*) east(i), north(i)
       end do
 
       close(99)
@@ -124,9 +127,9 @@ module geo_utils
       'set size ratio -1; ' // &
       'plot ' // &
       q // './preprocessing/DEM/UTM_gebco.xyz' // q // &
-      ' u 2:1:3 w dots palette notitle, ' // &
+      ' u 1:2:3 w dots palette notitle, ' // &
       q // './preprocessing/geometry/coast_debug.xyz' // q // &
-      ' u 2:1 w lp lw 1 lc rgb ' // q // 'black' // q // ' title ' // q // 'Closed Coast' // q // &
+      ' u 1:2 w lp lw 1 lc rgb ' // q // 'black' // q // ' title ' // q // 'Closed Coast' // q // &
       '"'
 
 call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
@@ -163,6 +166,5 @@ call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
       end if
 
    end subroutine
-
 end module geo_utils
 
