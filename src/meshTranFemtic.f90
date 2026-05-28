@@ -1889,11 +1889,7 @@ end subroutine surface_ellipsoids
             write (iu, '(3F15.5)') x(i), y(i), z(i)
          else
             ! Caso CON mar
-            if (z(i) > OBJcoastLine%sea_level) then
-               write (iu, '(3F15.5)') x(i), y(i), z(i)
-            else
-               write (iu, '(3F15.5)') x(i), y(i), -1.0_dp
-            end if
+            write (iu, '(3F15.5)') x(i), y(i), z(i)
          end if
       end do
       close (iu)
@@ -1919,12 +1915,7 @@ end subroutine surface_ellipsoids
             ! Caso SIN mar: no hay batimetría
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
          else
-            ! Caso CON mar
-            ! if (z(j) < OBJcoastLine%sea_level) then
-               write (iu, '(3F15.5)') x(j), y(j), -z(j)
-            ! else
-               ! write (iu, '(3F15.5)') x(j), y(j), -1.0_dp/1000.0d0
-            ! end if
+            write (iu, '(3F15.5)') x(j), y(j), -z(j)
          end if
       end do
       close (iu)
