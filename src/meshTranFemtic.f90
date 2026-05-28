@@ -16,7 +16,7 @@ program femtic_mesh_driver
    real(dp)::  x0, y0
    ! DEM data
    integer:: n_dem, n_edi_files, n_sites
-   real(dp), allocatable:: site_x(:), site_y(:), site_z(:), dem_x(:), dem_y(:), dem_z(:)
+   real(dp), allocatable, dimension(:) :: site_x, site_y, site_z, dem_x, dem_y, dem_z, z_topo, z_bathy
 
    !---------------------------------------------------
    !     Read input configutation file
@@ -29,7 +29,7 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Read Digital Elevation Model and output in km
    !---------------------------------------------------
-   call read_dem(settings, coast_line, dem_x, dem_y, dem_z, n_dem)
+   call read_dem(settings, coast_line, dem_x, dem_y, dem_z, z_topo, z_bathy, n_dem)
 
 
    print*, "Esto es DEM en km UTM "
@@ -114,8 +114,8 @@ program femtic_mesh_driver
    call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
    call define_analysis_domain(settings)
 
-   call write_topography(settings, coast_line , dem_x_km, dem_y_km, dem_z_km, n_dem)
-   call write_bathymetry(settings, coast_line , dem_x_km, dem_y_km, dem_z_km, n_dem)
+   call write_topography(settings, coast_line , dem_x_km, dem_y_km, z_topo, n_dem)
+   call write_bathymetry(settings, coast_line , dem_x_km, dem_y_km, z_bathy, n_dem)
    call write_coast_line(settings, coast_line)
 
    ! print*,' '
@@ -926,25 +926,26 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, nDEMpoints)
+   subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, topo, bathy, nDEMpoints)
 
       use mesh_config
-      use geo_utils, only: lat_long_to_UTM_km, debug_coastline
+      use geo_utils, only: lat_long_to_UTM_km, debug_coastline, ray_casting
       ! use coast_line, only: coastLine_generation
       use class_CoastLine
       implicit none
 
       type(Coast_Line) :: CoastLineOBJ
 
-      type(MeshSettings), intent(in)      :: OBJsettings
-      type(CoastLine)   , intent(inout)   :: OBJcoastLine
-      real(dp), allocatable, intent(out)  :: x(:), y(:), z(:)
+      type(MeshSettings),                  intent(in)    :: OBJsettings
+      type(CoastLine)   ,                  intent(inout) :: OBJcoastLine
+      real(dp), allocatable, DIMENSION(:), intent(out)   :: x, y, z, topo, bathy 
       integer, intent(out)                :: nDEMpoints
-      integer                            :: iu, i
-      real(dp)                           :: xx, yy, zz, longg, latt, elevv
-      real(dp), ALLOCATABLE              :: east_km(:), north_km(:)
-      real(dp), ALLOCATABLE              :: long(:), lat(:), elev(:)
-      real(dp)                           :: scale
+      integer                             :: iu, i
+      logical, allocatable, dimension(:)  :: is_land
+      real(dp)                            :: xx, yy, zz, longg, latt, elevv
+      real(dp), allocatable, dimension(:) :: east_km, north_km
+      real(dp), allocatable, dimension(:) :: long, lat, elev
+      real(dp)                            :: scale
 
       select case (OBJsettings%dem_LatLong)
          case ("yes")
@@ -1022,15 +1023,39 @@ end subroutine surface_ellipsoids
 
       close(iu)
 
+      ! allocating variables for any of the both cases
+      allocate (topo(nDEMpoints), bathy(nDEMpoints))
       select case (OBJcoastLine%has_sea)
          case ("yes")
          
          !Calling the object CoastLineOBJ to generate the Coast Line polygon in UTM x = north
-         call CoastLineOBJ%generate(OBJsettings,x, y, z,n_dem)
+         call CoastLineOBJ%generate(OBJsettings,x, y, z,nDEMpoints)
 
          pause
          call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
-      !
+         allocate(is_land(nDEMpoints))
+
+         call ray_casting(CoastLineOBJ%x, CoastLineOBJ%y, CoastLineOBJ%npoints, x, y, z, nDEMpoints, is_land)
+
+         ! Paso 3: corregir elevaciones ambiguas
+         do i = 1, nDEMpoints
+            if (is_land(i) .and. z(i) < 0.0_dp) z(i) =  0.001_dp  ! cuenca/valle bajo
+            if (.not. is_land(i) .and. z(i) > 0.0_dp) z(i) = -0.001_dp  ! artefacto marino
+         end do
+
+
+         !Assigning elevations to topo and marin deepths to bathymetry but these last, as positive value
+         do i = 1, nDEMpoints
+               !is_land(i) .eq. .true.
+            if (is_land(i) ) then
+               topo(i)  = z(i)
+               bathy(i) = -0.001_dp
+            else
+               topo(i)  = -0.001_dp
+               bathy(i) = -z(i)   ! positive deepth 
+            end if
+         end do
+
       !       nCoastLine = 0 
       !       do i = 1, size(z, dim=1), 1
       !          if (abs(z(i)) .le. 1) then
@@ -1056,7 +1081,8 @@ end subroutine surface_ellipsoids
       !       end do
       !
          case ("no")
-            continue
+            topo = z
+            bathy = -0.001_dp
          case default
             print*, 'DEM have to be specified if has or not Sea'
       end select
