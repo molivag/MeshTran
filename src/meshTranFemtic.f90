@@ -2,11 +2,13 @@ program femtic_mesh_driver
 
    use mesh_config
    use mesh_entities
+   use class_CoastLine
+
    implicit none
 
    type(GlobalRefinement)  :: globRefi
    type(ParamRefinement)   :: paramRefi
-   type(CoastLine)         :: coast_line
+   type(Coast_Line)        :: coastlineOBJ
    TYPE(MeshSettings)      :: settings
    type(ModelRegion)       :: regions
 
@@ -21,7 +23,7 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-   call read_set_femtic('set_meshtran.io', settings, coast_line, paramRefi, globRefi, regions)
+   call read_set_femtic('set_meshtran.io', settings, coastlineOBJ, paramRefi, globRefi, regions)
    !---------------------------------------------------
    !     Check if Read input configutation file
    !---------------------------------------------------
@@ -29,7 +31,7 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Read Digital Elevation Model and output in km
    !---------------------------------------------------
-   call read_dem(settings, coast_line, dem_x, dem_y, dem_z, z_topo, z_bathy, n_dem)
+   call read_dem(settings, dem_x, dem_y, dem_z, z_topo, z_bathy, n_dem)
 
 
    print*, "Esto es DEM en km UTM "
@@ -114,10 +116,9 @@ program femtic_mesh_driver
    call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
    call define_analysis_domain(settings)
 
-   call write_topography(settings, coast_line , dem_x_km, dem_y_km, z_topo, n_dem)
-   call write_bathymetry(settings, coast_line , dem_x_km, dem_y_km, z_bathy, n_dem)
-   call write_coast_line(settings, coast_line)
-
+   call write_topography(settings, coastlineOBJ%has_sea , dem_x_km, dem_y_km, z_topo, n_dem)
+   call write_bathymetry(settings, coastlineOBJ%has_sea , dem_x_km, dem_y_km, z_bathy, n_dem)
+   ! call write_coast_line(settings, coastlineOBJ%has_sea )
    ! print*,' '
    ! print*,' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
    ! ! print*, '        site_z_km                      fix_elev_site'
@@ -163,6 +164,8 @@ contains
    !=========================================================
    subroutine read_set_femtic(fname, OBJsettings, OBJcoastLine, OBJparamRefi, OBJglobRefi, OBJmodReg)
 
+      use class_CoastLine
+
       implicit none
 
       character(len=*), intent(in) :: fname
@@ -170,7 +173,7 @@ contains
       type(ParamRefinement),     INTENT(INout) :: OBJparamRefi
       type(MeshSettings),        intent(inout) :: OBJsettings
       type(ModelRegion),         INTENT(INOUT) :: OBJmodReg
-      type(CoastLine),           INTENT(INOUT) :: OBJcoastLine
+      type(Coast_Line),           INTENT(INOUT) :: OBJcoastLine
 
       character(len=256) :: line, key, val
       integer :: iu
@@ -926,7 +929,8 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, topo, bathy, nDEMpoints)
+   ! subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, topo, bathy, nDEMpoints)
+   subroutine read_dem(OBJsettings, x, y, z, topo, bathy, nDEMpoints)
 
       use mesh_config
       use geo_utils, only: lat_long_to_UTM_km, debug_coastline, ray_casting
@@ -937,7 +941,7 @@ end subroutine surface_ellipsoids
       type(Coast_Line) :: CoastLineOBJ
 
       type(MeshSettings),                  intent(in)    :: OBJsettings
-      type(CoastLine)   ,                  intent(inout) :: OBJcoastLine
+      ! type(CoastLine)   ,                  intent(inout) :: OBJcoastLine
       real(dp), allocatable, DIMENSION(:), intent(out)   :: x, y, z, topo, bathy 
       integer, intent(out)                :: nDEMpoints
       integer                             :: iu, i
@@ -1025,7 +1029,7 @@ end subroutine surface_ellipsoids
 
       ! allocating variables for any of the both cases
       allocate (topo(nDEMpoints), bathy(nDEMpoints))
-      select case (OBJcoastLine%has_sea)
+      select case (CoastLineOBJ%has_sea)
          case ("yes")
          
          !Calling the object CoastLineOBJ to generate the Coast Line polygon in UTM x = north
@@ -1155,166 +1159,166 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine nearest_neighbor_ordering(OBJcoastLine)
-      implicit none
-
-      type(CoastLine)   , intent(inout)      :: OBJcoastLine
-      ! logical :: used(OBJcoastLine%nPoints)
-      real(dp), dimension (:), allocatable :: distance, orderedX, orderedY
-
-      real(dp) :: start
-      ! logical :: 
-      integer ::  i, start_loc, current, k, next
-
-      allocate(&
-         OBJcoastLine%used(OBJcoastLine%nPoints),&
-         distance(OBJcoastLine%nPoints),&
-         orderedX(OBJcoastLine%nPoints),&
-         orderedY(OBJcoastLine%nPoints)&
-      )
-
-      OBJcoastLine%used = .false.
-      start = minval(OBJcoastLine%x, dim=1, mask=(.not. OBJcoastLine%used)) 
-      start_loc = minloc(OBJcoastLine%x, mask=(.not. OBJcoastLine%used), dim=1)
-      ! start_loc = minloc(OBJcoastLine%x, dim=1) 
-
-
-      print*, 'Est es el piunto mas occidental: ', start
-      print*, 'Est es la location: ', start_loc
-
-      ! print*, 'X-coast line         Y-coast line         Z-coast line'
-      ! do i =1, OBJcoastLine%nPoints
-      !    print'(I3, 3(2x, f15.5))', i, OBJcoastLine%x(i), OBJcoastLine%y(i), OBJcoastLine%z(i)
-      ! end do
-
-
-      ! location or position in x-vector coordinate
-      current = start_loc
-      ! filling the ordered vector-x with the position "current" in vector-x of coast line
-      orderedX(1) = coast_line%x(current)
-      orderedY(1) = coast_line%y(current)
-      !mark that "current" position as used
-      OBJcoastLine%used(current) = .true.
-         print*, 'k             distance              next'
-      do k  = 2, OBJcoastLine%nPoints
-         ! print*, ' ' 
-         do i = 1, OBJcoastLine%nPoints
-      
-            if ( OBJcoastLine%used(i) ) then
-               distance(i) = huge(1.0_dp)
-            else
-               distance(i) = SQRT(&
-               ( coast_line%x(i) - coast_line%x(current) )**2 + &
-               ( coast_line%y(i) - coast_line%y(current) )**2 )
-            end if
-
-         
-            ! print*, k, i, distance(i)
-         end do
-         next = minloc(distance, dim=1)
-         orderedX(k) = coast_line%x(next)
-         orderedY(k) = coast_line%y(next)
-
-         OBJcoastLine%used(next) = .true.
-         current = next
-      end do
-      
-         ! print*, '  orderedX       originalX        orderedY       originalY'
-         ! do i = 1, OBJcoastLine%nPoints
-         ! print'(4(1x, f15.5))', orderedX(i), coast_line%x(i),  orderedY(i), coast_line%y(i)
-      ! enddo
-
-      ! call debug_coastline(orderedX, orderedY, OBJcoastLine%nPoints)
-
-   end subroutine nearest_neighbor_ordering
+!    subroutine nearest_neighbor_ordering(OBJcoastLine)
+!       implicit none
+!
+!       type(CoastLine)   , intent(inout)      :: OBJcoastLine
+!       ! logical :: used(OBJcoastLine%nPoints)
+!       real(dp), dimension (:), allocatable :: distance, orderedX, orderedY
+!
+!       real(dp) :: start
+!       ! logical :: 
+!       integer ::  i, start_loc, current, k, next
+!
+!       allocate(&
+!          OBJcoastLine%used(OBJcoastLine%nPoints),&
+!          distance(OBJcoastLine%nPoints),&
+!          orderedX(OBJcoastLine%nPoints),&
+!          orderedY(OBJcoastLine%nPoints)&
+!       )
+!
+!       OBJcoastLine%used = .false.
+!       start = minval(OBJcoastLine%x, dim=1, mask=(.not. OBJcoastLine%used)) 
+!       start_loc = minloc(OBJcoastLine%x, mask=(.not. OBJcoastLine%used), dim=1)
+!       ! start_loc = minloc(OBJcoastLine%x, dim=1) 
+!
+!
+!       print*, 'Est es el piunto mas occidental: ', start
+!       print*, 'Est es la location: ', start_loc
+!
+!       ! print*, 'X-coast line         Y-coast line         Z-coast line'
+!       ! do i =1, OBJcoastLine%nPoints
+!       !    print'(I3, 3(2x, f15.5))', i, OBJcoastLine%x(i), OBJcoastLine%y(i), OBJcoastLine%z(i)
+!       ! end do
+!
+!
+!       ! location or position in x-vector coordinate
+!       current = start_loc
+!       ! filling the ordered vector-x with the position "current" in vector-x of coast line
+!       orderedX(1) = coast_line%x(current)
+!       orderedY(1) = coast_line%y(current)
+!       !mark that "current" position as used
+!       OBJcoastLine%used(current) = .true.
+!          print*, 'k             distance              next'
+!       do k  = 2, OBJcoastLine%nPoints
+!          ! print*, ' ' 
+!          do i = 1, OBJcoastLine%nPoints
+!
+!             if ( OBJcoastLine%used(i) ) then
+!                distance(i) = huge(1.0_dp)
+!             else
+!                distance(i) = SQRT(&
+!                ( coast_line%x(i) - coast_line%x(current) )**2 + &
+!                ( coast_line%y(i) - coast_line%y(current) )**2 )
+!             end if
+!
+!
+!             ! print*, k, i, distance(i)
+!          end do
+!          next = minloc(distance, dim=1)
+!          orderedX(k) = coast_line%x(next)
+!          orderedY(k) = coast_line%y(next)
+!
+!          OBJcoastLine%used(next) = .true.
+!          current = next
+!       end do
+!
+!          ! print*, '  orderedX       originalX        orderedY       originalY'
+!          ! do i = 1, OBJcoastLine%nPoints
+!          ! print'(4(1x, f15.5))', orderedX(i), coast_line%x(i),  orderedY(i), coast_line%y(i)
+!       ! enddo
+!
+!       ! call debug_coastline(orderedX, orderedY, OBJcoastLine%nPoints)
+!
+!    end subroutine nearest_neighbor_ordering
+! !=========================================================
+! !=======
+!=========================================================
+   ! subroutine read_simplifiedCurve(npts, poly)
+   !    implicit none
+   !    real(dp), dimension(:,:), allocatable, intent(out) :: poly
+   !    integer, INTENT(OUT) :: npts
+   !    integer :: i, j, iu, npolygons
+   !
+   !    open (newunit=iu , file='preprocessing/geometry/coastline_simplified.dat', status='old' )
+   !
+   !    read(iu,15) npolygons
+   !    do i = 1, npolygons
+   !
+   !       read(iu,15) npts
+   !
+   !       allocate(poly(npts,2))
+   !
+   !       do j = 1, npts
+   !           read(iu,*) poly(j,1), poly(j,2)
+   !       end do
+   !
+   !    end do 
+   !    close(unit=iu)
+   !
+   !    15 format (I5)
+   !    16 format (2/, 2(f10.5),/)
+   !
+   !
+   ! end subroutine read_simplifiedCurve
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_simplifiedCurve(npts, poly)
-      implicit none
-      real(dp), dimension(:,:), allocatable, intent(out) :: poly
-      integer, INTENT(OUT) :: npts
-      integer :: i, j, iu, npolygons
-
-      open (newunit=iu , file='preprocessing/geometry/coastline_simplified.dat', status='old' )
-
-      read(iu,15) npolygons
-      do i = 1, npolygons
-
-         read(iu,15) npts
-      
-         allocate(poly(npts,2))
-      
-         do j = 1, npts
-             read(iu,*) poly(j,1), poly(j,2)
-         end do
-      
-      end do 
-      close(unit=iu)
-      
-      15 format (I5)
-      16 format (2/, 2(f10.5),/)
-
-
-   end subroutine read_simplifiedCurve
-!=========================================================
-!=======
-!=========================================================
-   subroutine closing_coast_line(npts, poly, p1_ext, pn_ext)
-
-      implicit none
-
-      real(dp), dimension(:,:), allocatable, intent(in) :: poly
-      integer, INTENT(in) :: npts
-      real(dp), dimension(2), INTENT(OUT) :: p1_ext, pn_ext
-      real(dp) :: extDist
-      real(dp) :: v1(2), v2(2)
-      real(dp) :: norm1, norm2
-      
-      ! ----------------------------------------------------------
-      ! Extension distance outside the domain
-      ! ----------------------------------------------------------
-      extDist = 10.0_dp   ! km
-      
-      ! ==========================================================
-      ! FIRST EXTREME
-      ! ==========================================================
-      
-      ! vector from first point to second point
-      v1(1) = poly(2,1) - poly(1,1)
-      v1(2) = poly(2,2) - poly(1,2)
-      
-      ! vector norm
-      norm1 = sqrt(v1(1)**2 + v1(2)**2)
-      
-      ! normalize
-      v1(1) = v1(1) / norm1
-      v1(2) = v1(2) / norm1
-      
-      ! extended point BEFORE first point
-      p1_ext(1) = poly(1,1) - extDist * v1(1)
-      p1_ext(2) = poly(1,2) - extDist * v1(2)
-      
-      ! ==========================================================
-      ! LAST EXTREME
-      ! ==========================================================
-      
-      ! vector from penultimate point to last point
-      v2(1) = poly(npts,1) - poly(npts-1,1)
-      v2(2) = poly(npts,2) - poly(npts-1,2)
-      
-      ! vector norm
-      norm2 = sqrt(v2(1)**2 + v2(2)**2)
-      
-      ! normalize
-      v2(1) = v2(1) / norm2
-      v2(2) = v2(2) / norm2
-      
-      ! extended point AFTER last point
-      pn_ext(1) = poly(npts,1) + extDist * v2(1)
-      pn_ext(2) = poly(npts,2) + extDist * v2(2)
-   
-   end subroutine closing_coast_line
+   ! subroutine closing_coast_line(npts, poly, p1_ext, pn_ext)
+   !
+   !    implicit none
+   !
+   !    real(dp), dimension(:,:), allocatable, intent(in) :: poly
+   !    integer, INTENT(in) :: npts
+   !    real(dp), dimension(2), INTENT(OUT) :: p1_ext, pn_ext
+   !    real(dp) :: extDist
+   !    real(dp) :: v1(2), v2(2)
+   !    real(dp) :: norm1, norm2
+   !
+   !    ! ----------------------------------------------------------
+   !    ! Extension distance outside the domain
+   !    ! ----------------------------------------------------------
+   !    extDist = 10.0_dp   ! km
+   !
+   !    ! ==========================================================
+   !    ! FIRST EXTREME
+   !    ! ==========================================================
+   !
+   !    ! vector from first point to second point
+   !    v1(1) = poly(2,1) - poly(1,1)
+   !    v1(2) = poly(2,2) - poly(1,2)
+   !
+   !    ! vector norm
+   !    norm1 = sqrt(v1(1)**2 + v1(2)**2)
+   !
+   !    ! normalize
+   !    v1(1) = v1(1) / norm1
+   !    v1(2) = v1(2) / norm1
+   !
+   !    ! extended point BEFORE first point
+   !    p1_ext(1) = poly(1,1) - extDist * v1(1)
+   !    p1_ext(2) = poly(1,2) - extDist * v1(2)
+   !
+   !    ! ==========================================================
+   !    ! LAST EXTREME
+   !    ! ==========================================================
+   !
+   !    ! vector from penultimate point to last point
+   !    v2(1) = poly(npts,1) - poly(npts-1,1)
+   !    v2(2) = poly(npts,2) - poly(npts-1,2)
+   !
+   !    ! vector norm
+   !    norm2 = sqrt(v2(1)**2 + v2(2)**2)
+   !
+   !    ! normalize
+   !    v2(1) = v2(1) / norm2
+   !    v2(2) = v2(2) / norm2
+   !
+   !    ! extended point AFTER last point
+   !    pn_ext(1) = poly(npts,1) + extDist * v2(1)
+   !    pn_ext(2) = poly(npts,2) + extDist * v2(2)
+   !
+   ! end subroutine closing_coast_line
 !=========================================================
 !=======
 !=========================================================
@@ -1871,10 +1875,12 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_topography(OBJsettings, OBJcoastLine, x, y, z, n)
+   subroutine write_topography(OBJsettings, has_sea, x, y, z, n)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
-      type(CoastLine), INTENT(IN) :: OBJcoastLine
+
+      character(len=5), intent(in) :: has_sea
+
       integer, intent(in)     :: n
       real(dp), intent(in)    :: x(n), y(n), z(n)
       ! real(dp), INTENT(INOUT) :: z(:)
@@ -1884,7 +1890,7 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
       do i = 1, n
-         if (OBJcoastLine%has_sea .eq. 'no') then
+         if (has_sea .eq. 'no') then
             ! Caso SIN mar: todo es tierra
             write (iu, '(3F15.5)') x(i), y(i), z(i)
          else
@@ -1897,11 +1903,13 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_bathymetry(OBJsettings, OBJcoastLine, x, y, z, n)
+   subroutine write_bathymetry(OBJsettings, has_sea, x, y, z, n)
 
       implicit none
       TYPE(MeshSettings), INTENT(IN) :: OBJsettings
-      type(CoastLine), INTENT(IN) :: OBJcoastLine
+
+      character(len=5), intent(in) :: has_sea
+
       real(dp), intent(in):: x(:), y(:), z(:)
       ! real(dp), INTENT(INOUT) :: z(:)
       integer, intent(in):: n
@@ -1911,7 +1919,7 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%bathymetry_file, status='replace')
       do j = 1, n
-         if (OBJcoastLine%has_sea .eq. 'no') then
+         if (has_sea .eq. 'no') then
             ! Caso SIN mar: no hay batimetría
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
          else
@@ -1924,69 +1932,69 @@ end subroutine surface_ellipsoids
 !=======
 !=========================================================
    ! subroutine write_coast_line(CoastLineOBJ, OBJsettings, OBJcoastLine)
-   subroutine write_coast_line(OBJsettings, OBJcoastLine)
-
-      use geo_utils, only: debug_coastline
-      ! use class_CoastLine
-
-      implicit none
-      type(MeshSettings),  INTENT(IN) :: OBJsettings
-      type(CoastLine),     INTENT(IN) :: OBJcoastLine
-
-      ! type(Coast_Line),  INTENT(IN) :: CoastLineOBJ
-
-      real(dp), dimension(:,:), allocatable  :: simplified_curve
-      real(dp), dimension(2)                 :: p1_ext, pn_ext
-      integer:: iu, npoint_simple, npts 
-      integer :: i
-
-      ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
-      ! xmax = OBJsettings%xmaxDOM + OBJsettings%pad_x
-      ! ymin = OBJsettings%yminDOM - OBJsettings%pad_y
-      ! ymax = OBJsettings%ymaxDOM + OBJsettings%pad_y
-
-         open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
-      if (OBJcoastLine%has_sea .eq. 'no') then
-         ! open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
-         write (iu, *) 1
-         write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xminDOM - 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
-         write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xmaxDOM + 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
-         write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xmaxDOM + 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 0, 0
-         write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xminDOM - 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 1, 0
-         ! close (iu)
-      else
-         print*, 'Sea case not implemented yet'
-
-         pause
-         ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
-
-         pause
-
-         call read_simplifiedCurve(npoint_simple, simplified_curve)
-         call closing_coast_line(npoint_simple, simplified_curve, p1_ext, pn_ext)
-         npts = npoint_simple
-
-         write(iu,*) 1
-         
-         ! first extended point
-         write(iu,'(2(F21.15,1X),2I2)') p1_ext(1), p1_ext(2), 0, 0
-         
-         ! original coastline
-         do i = 1, npts-1
-            write(iu,'(2(F21.15,1X),2I2)') simplified_curve(i,1), simplified_curve(i,2), 0, 0
-         end do
-         
-         ! last original point closes polyline
-         write(iu,'(2(F21.15,1X),2I2)') simplified_curve(npts,1), simplified_curve(npts,2), 0, 0
-         
-         ! final extended point with closure flag
-         write(iu,'(2(F21.15,1X),2I2)') pn_ext(1), pn_ext(2), 1, 0
-
-
-
-      end if
-         close (iu)
-   end subroutine write_coast_line
+   ! subroutine write_coast_line(OBJsettings, OBJcoastLine)
+   !
+   !    use geo_utils, only: debug_coastline
+   !    use class_CoastLine
+   !
+   !    implicit none
+   !    type(MeshSettings),  INTENT(IN) :: OBJsettings
+   !    type(Coast_Line),     INTENT(IN) :: OBJcoastLine
+   !
+   !    ! type(Coast_Line),  INTENT(IN) :: CoastLineOBJ
+   !
+   !    real(dp), dimension(:,:), allocatable  :: simplified_curve
+   !    real(dp), dimension(2)                 :: p1_ext, pn_ext
+   !    integer:: iu, npoint_simple, npts 
+   !    integer :: i
+   !
+   !    ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
+   !    ! xmax = OBJsettings%xmaxDOM + OBJsettings%pad_x
+   !    ! ymin = OBJsettings%yminDOM - OBJsettings%pad_y
+   !    ! ymax = OBJsettings%ymaxDOM + OBJsettings%pad_y
+   !
+   !       open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
+   !    if (OBJcoastLine%has_sea .eq. 'no') then
+   !       ! open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
+   !       write (iu, *) 1
+   !       write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xminDOM - 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
+   !       write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xmaxDOM + 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
+   !       write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xmaxDOM + 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 0, 0
+   !       write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xminDOM - 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 1, 0
+   !       ! close (iu)
+   !    else
+   !       print*, 'Sea case not implemented yet'
+   !
+   !       pause
+   !       ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
+   !
+   !       pause
+   !
+   !       ! call read_simplifiedCurve(npoint_simple, simplified_curve)
+   !       ! call closing_coast_line(npoint_simple, simplified_curve, p1_ext, pn_ext)
+   !       ! npts = npoint_simple
+   !       !
+   !       ! write(iu,*) 1
+   !       !
+   !       ! ! first extended point
+   !       ! write(iu,'(2(F21.15,1X),2I2)') p1_ext(1), p1_ext(2), 0, 0
+   !       !
+   !       ! ! original coastline
+   !       ! do i = 1, npts-1
+   !       !    write(iu,'(2(F21.15,1X),2I2)') simplified_curve(i,1), simplified_curve(i,2), 0, 0
+   !       ! end do
+   !       !
+   !       ! ! last original point closes polyline
+   !       ! write(iu,'(2(F21.15,1X),2I2)') simplified_curve(npts,1), simplified_curve(npts,2), 0, 0
+   !       !
+   !       ! ! final extended point with closure flag
+   !       ! write(iu,'(2(F21.15,1X),2I2)') pn_ext(1), pn_ext(2), 1, 0
+   !       !
+   !
+   !
+   !    end if
+   !       close (iu)
+   ! end subroutine write_coast_line
 !=========================================================
 !=======
 !=========================================================
@@ -2298,7 +2306,7 @@ end subroutine surface_ellipsoids
 !=========================================================
    subroutine PARAM_ELLIPSOIDS(Nsites, siteX, siteY, OBJsettings, obj_modReg, OBJglobRefi, A, LEN, FH, FV)
       ! target_depth_km, fmin_hz, rho_ref,
-      ! Ne, A, LEN, FH, FV)
+      ! ee, A, LEN, FH, FV)
 
       implicit none
 
