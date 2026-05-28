@@ -1032,7 +1032,7 @@ end subroutine surface_ellipsoids
          call CoastLineOBJ%generate(OBJsettings,x, y, z,nDEMpoints)
 
          pause
-         call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
+         ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
          allocate(is_land(nDEMpoints))
 
          call ray_casting(CoastLineOBJ%x, CoastLineOBJ%y, CoastLineOBJ%npoints, x, y, z, nDEMpoints, is_land)
@@ -1923,11 +1923,18 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
+   ! subroutine write_coast_line(CoastLineOBJ, OBJsettings, OBJcoastLine)
    subroutine write_coast_line(OBJsettings, OBJcoastLine)
+
+      use geo_utils, only: debug_coastline
+      ! use class_CoastLine
 
       implicit none
       type(MeshSettings),  INTENT(IN) :: OBJsettings
       type(CoastLine),     INTENT(IN) :: OBJcoastLine
+
+      ! type(Coast_Line),  INTENT(IN) :: CoastLineOBJ
+
       real(dp), dimension(:,:), allocatable  :: simplified_curve
       real(dp), dimension(2)                 :: p1_ext, pn_ext
       integer:: iu, npoint_simple, npts 
@@ -1949,6 +1956,11 @@ end subroutine surface_ellipsoids
          ! close (iu)
       else
          print*, 'Sea case not implemented yet'
+
+         pause
+         ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
+
+         pause
 
          call read_simplifiedCurve(npoint_simple, simplified_curve)
          call closing_coast_line(npoint_simple, simplified_curve, p1_ext, pn_ext)
