@@ -31,16 +31,16 @@ module mesh_config
    end type
 
 
-   type :: CoastLine
-      character(len=5) :: has_sea
-      real, DIMENSION(:), allocatable  :: x
-      real, DIMENSION(:), allocatable  :: y
-      real, DIMENSION(:), allocatable  :: z
-      logical, allocatable             :: used(:)
-      real(dp) :: sea_level
-      integer  :: nPoints
-
-   end type
+   ! type :: CoastLine
+   !    character(len=5) :: has_sea
+   !    real, DIMENSION(:), allocatable  :: x
+   !    real, DIMENSION(:), allocatable  :: y
+   !    real, DIMENSION(:), allocatable  :: z
+   !    logical, allocatable             :: used(:)
+   !    real(dp) :: sea_level
+   !    integer  :: nPoints
+   !
+   ! end type
 
 
 end module mesh_config
