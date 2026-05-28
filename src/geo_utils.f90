@@ -166,5 +166,95 @@ call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
       end if
 
    end subroutine
+!=========================================================
+!=======
+!=========================================================
+
+subroutine ray_casting(CoastLineOBJ, dem_x, dem_y, dem_z, n_dem, is_land)
+
+   use class_CoastLine
+
+   implicit none
+
+   type(Coast_Line), intent(in)  :: CoastLineOBJ
+   integer,          intent(in)  :: n_dem
+   real(dp),         intent(in)  :: dem_x(n_dem)   ! Norte (km)
+   real(dp),         intent(in)  :: dem_y(n_dem)   ! Este  (km)
+   real(dp),         intent(in)  :: dem_z(n_dem)   ! Elevacion (km)
+   logical,          intent(out) :: is_land(n_dem)
+
+   integer  :: i, j, cnt
+   real(dp) :: px, py, xi, yi, xj, yj
+   real(dp), parameter :: eps = 1.0d-10
+
+   do i = 1, n_dem
+      px  = dem_x(i)
+      py  = dem_y(i)
+      cnt = 0
+
+      do j = 1, CoastLineOBJ%npoints - 1
+         xi = CoastLineOBJ%x(j)
+         yi = CoastLineOBJ%y(j)
+         xj = CoastLineOBJ%x(j+1)
+         yj = CoastLineOBJ%y(j+1)
+
+         if (ray_intersects_seg(px, py, xi, yi, xj, yj, eps)) &
+            cnt = cnt + 1
+      end do
+
+      is_land(i) = (mod(cnt, 2) /= 0)
+   end do
+
+contains
+
+   function ray_intersects_seg(px, py, ax, ay, bx, by, eps) result(intersect)
+      implicit none
+      real(dp), intent(in) :: px, py, ax, ay, bx, by, eps
+      logical :: intersect
+
+      real(dp) :: ppy, seg_ax, seg_ay, seg_bx, seg_by
+      real(dp) :: m_red, m_blue
+
+      ! A debe ser el punto con menor x (Norte)
+      if (ax > bx) then
+         seg_ax = bx;  seg_ay = by
+         seg_bx = ax;  seg_by = ay
+      else
+         seg_ax = ax;  seg_ay = ay
+         seg_bx = bx;  seg_by = by
+      end if
+
+      ! Evitar rayo sobre vertice
+      ppy = px
+      if (ppy == seg_ax .or. ppy == seg_bx) ppy = ppy + eps
+
+      intersect = .false.
+
+      if (ppy < seg_ax .or. ppy > seg_bx) return
+      if (py  > max(seg_ay, seg_by))       return
+
+      if (py < min(seg_ay, seg_by)) then
+         intersect = .true.
+         return
+      end if
+
+      if (abs(seg_bx - seg_ax) > tiny(1.0_dp)) then
+         m_red = (seg_by - seg_ay) / (seg_bx - seg_ax)
+      else
+         m_red = huge(1.0_dp)
+      end if
+
+      if (abs(px - seg_ax) > tiny(1.0_dp)) then
+         m_blue = (ppy - seg_ay) / (py - seg_ay)
+      else
+         m_blue = huge(1.0_dp)
+      end if
+
+      intersect = (m_blue >= m_red)
+
+   end function ray_intersects_seg
+
+end subroutine ray_casting
+
 end module geo_utils
 
