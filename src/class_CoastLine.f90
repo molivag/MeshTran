@@ -15,7 +15,9 @@ module class_CoastLine
    public :: Coast_Line
 
    type :: Coast_Line
+      character(len=5) :: has_sea
       integer :: npoints = 0
+      real(dp) :: sea_level
 
       real(dp), allocatable :: x(:)
       real(dp), allocatable :: y(:)
