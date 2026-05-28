@@ -170,13 +170,12 @@ call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
 !=======
 !=========================================================
 
-subroutine ray_casting(CoastLineOBJ, dem_x, dem_y, dem_z, n_dem, is_land)
-
-   use class_CoastLine
+subroutine ray_casting(coast_x, coast_y, n_coast, dem_x, dem_y, dem_z, n_dem, is_land)
 
    implicit none
 
-   type(Coast_Line), intent(in)  :: CoastLineOBJ
+   integer,  intent(in) :: n_coast
+   real(dp), intent(in) :: coast_x(n_coast), coast_y(n_coast)
    integer,          intent(in)  :: n_dem
    real(dp),         intent(in)  :: dem_x(n_dem)   ! Norte (km)
    real(dp),         intent(in)  :: dem_y(n_dem)   ! Este  (km)
@@ -192,11 +191,11 @@ subroutine ray_casting(CoastLineOBJ, dem_x, dem_y, dem_z, n_dem, is_land)
       py  = dem_y(i)
       cnt = 0
 
-      do j = 1, CoastLineOBJ%npoints - 1
-         xi = CoastLineOBJ%x(j)
-         yi = CoastLineOBJ%y(j)
-         xj = CoastLineOBJ%x(j+1)
-         yj = CoastLineOBJ%y(j+1)
+      do j = 1, n_coast - 1
+         xi = coast_x(j)
+         yi = coast_y(j)
+         xj = coast_x(j+1)
+         yj = coast_y(j+1)
 
          if (ray_intersects_seg(px, py, xi, yi, xj, yj, eps)) &
             cnt = cnt + 1
