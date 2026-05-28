@@ -35,7 +35,7 @@ module class_CoastLine
 contains
    subroutine generate(this, OBJsettings, dem_x, dem_y, dem_z, nDEM)!, closed_Clx, closed_CLy, npoinClosedCL)
 
-      use geo_utils, only: lat_long_to_UTM_km, debug_coastline
+      use geo_utils, only: lat_long_to_UTM_km
       implicit none
 
       class(Coast_Line), intent(inout) :: this
@@ -65,8 +65,6 @@ contains
 
       !however for MT convention where x point to north, we feed the following routine with x=north
       call this%closing( dem_x, dem_y, dem_z, nDEM)!, closed_CLx, closed_Cly, npoinClosedCL)
-
-      call debug_coastline(this%x, this%y, this%npoints) 
 
    end subroutine generate
    !=========================================================
@@ -497,6 +495,9 @@ contains
       ! ============================================================
       ! CLOSE POLYGON
       ! ============================================================
+
+      ! Here    west/east move y
+      ! and   north/south move x
      
       select case (trim(close_to))
      
@@ -505,42 +506,6 @@ contains
          ! ============================================================
      
       case ("east")
-     
-         closed_x(n_coast + 1) = xmax
-         closed_y(n_coast + 1) = coast_y(n_coast)
-     
-         closed_x(n_coast + 2) = xmax
-         closed_y(n_coast + 2) = ymax
-     
-         closed_x(n_coast + 3) = xmax
-         closed_y(n_coast + 3) = coast_y(1)
-     
-         closed_x(n_coast + 4) = coast_x(1)
-         closed_y(n_coast + 4) = coast_y(1)
-     
-         ! ============================================================
-         ! WEST
-         ! ============================================================
-     
-      case ("west")
-     
-         closed_x(n_coast + 1) = xmin
-         closed_y(n_coast + 1) = coast_y(n_coast)
-     
-         closed_x(n_coast + 2) = xmin
-         closed_y(n_coast + 2) = ymax
-     
-         closed_x(n_coast + 3) = xmin
-         closed_y(n_coast + 3) = coast_y(1)
-     
-         closed_x(n_coast + 4) = coast_x(1)
-         closed_y(n_coast + 4) = coast_y(1)
-     
-         ! ============================================================
-         ! NORTH
-         ! ============================================================
-     
-      case ("north")
      
          closed_x(n_coast + 1) = coast_x(n_coast)
          closed_y(n_coast + 1) = ymax
@@ -555,10 +520,11 @@ contains
          closed_y(n_coast + 4) = coast_y(1)
      
          ! ============================================================
-         ! SOUTH
+         ! WEST
          ! ============================================================
      
-      case ("south")
+      case ("west")
+         !horizontal proyection to the west boundary
      
          closed_x(n_coast + 1) = coast_x(n_coast)
          closed_y(n_coast + 1) = ymin
@@ -568,6 +534,42 @@ contains
      
          closed_x(n_coast + 3) = coast_x(1)
          closed_y(n_coast + 3) = ymin
+     
+         closed_x(n_coast + 4) = coast_x(1)
+         closed_y(n_coast + 4) = coast_y(1)
+     
+         ! ============================================================
+         ! NORTH
+         ! ============================================================
+     
+      case ("north")
+     
+         closed_x(n_coast + 1) = xmax
+         closed_y(n_coast + 1) = coast_x(n_coast)
+     
+         closed_x(n_coast + 2) = xmax
+         closed_y(n_coast + 2) = ymax
+     
+         closed_x(n_coast + 3) = xmax
+         closed_y(n_coast + 3) = coast_x(1)
+     
+         closed_x(n_coast + 4) = coast_x(1)
+         closed_y(n_coast + 4) = coast_y(1)
+     
+         ! ============================================================
+         ! SOUTH
+         ! ============================================================
+     
+      case ("south")
+     
+         closed_x(n_coast + 1) = xmin
+         closed_y(n_coast + 1) = coast_y(n_coast)
+     
+         closed_x(n_coast + 2) = xmin
+         closed_y(n_coast + 2) = ymin
+     
+         closed_x(n_coast + 3) = xmin
+         closed_y(n_coast + 3) = coast_y(1)
      
          closed_x(n_coast + 4) = coast_x(1)
          closed_y(n_coast + 4) = coast_y(1)
