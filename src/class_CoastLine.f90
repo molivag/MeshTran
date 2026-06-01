@@ -17,12 +17,13 @@ module class_CoastLine
    type :: Coast_Line
       character(len=5) :: has_sea
       integer :: npoints = 0
+      integer :: npoinclose = 0
       real(dp) :: sea_level
 
-      real(dp), allocatable :: x(:)
-      real(dp), allocatable :: y(:)
-      real(dp), allocatable :: lat(:)
-      real(dp), allocatable :: long(:)
+      real(dp), allocatable, dimension(:) :: x, closedX
+      real(dp), allocatable, dimension(:) :: y, closedY
+      real(dp), allocatable, dimension(:) :: lat
+      real(dp), allocatable, dimension(:) :: long
 
       logical :: is_closed = .false.
 
@@ -91,7 +92,6 @@ contains
       DEM_file = OBJsettings%dem_file
       DEM_file = trim(DEM_file)
       folder = DEM_file(:len_trim(DEM_file) - 4)
-      print *, folder
       full_path = "preprocessing/DEM/coast_line_"//trim(folder)
 
       call EXECUTE_COMMAND_LINE("mkdir -p preprocessing/DEM/coast_line_"//trim(folder), exitstat=stat)
@@ -295,8 +295,9 @@ contains
       n_coast =  this%npoints 
       allocate( coast_x(n_coast), coast_y(n_coast) )
 
-     coast_x = this%x 
-     coast_y = this%y
+      !Here is the coast lines points transformed to UTM
+      coast_x = this%x 
+      coast_y = this%y
 
 
 
@@ -587,9 +588,10 @@ contains
      
       end select
 
-      this%npoints = n_closed
-      this%x = closed_x
-      this%y = closed_y
+      this%npoinclose = n_closed
+      allocate( this%closedX(n_closed), this%closedY(n_closed))
+      this%closedX = closed_x
+      this%closedY = closed_y
 
    end subroutine closing
 !
