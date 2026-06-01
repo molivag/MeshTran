@@ -186,6 +186,10 @@ subroutine ray_casting(coast_x, coast_y, n_coast, dem_x, dem_y, dem_z, n_dem, is
    real(dp) :: px, py, xi, yi, xj, yj
    real(dp), parameter :: eps = 1.0d-10
 
+   print*, " "
+   print*, " ---> Running Ray Casting algorithm to clasify DEM"
+   print*, " "
+
    do i = 1, n_dem
       px  = dem_x(i)
       py  = dem_y(i)
