@@ -8,7 +8,7 @@ program femtic_mesh_driver
 
    type(GlobalRefinement)  :: globRefi
    type(ParamRefinement)   :: paramRefi
-   type(Coast_Line)        :: coastlineOBJ
+   type(Coast_Line)        :: coastLine
    TYPE(MeshSettings)      :: settings
    type(ModelRegion)       :: regions
 
@@ -23,7 +23,7 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-   call read_set_femtic('set_meshtran.io', settings, coastlineOBJ, paramRefi, globRefi, regions)
+   call read_set_femtic('set_meshtran.io', settings, coastLine, paramRefi, globRefi, regions)
    !---------------------------------------------------
    !     Check if Read input configutation file
    !---------------------------------------------------
@@ -31,7 +31,12 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Read Digital Elevation Model and output in km
    !---------------------------------------------------
-   call read_dem(settings, dem_x, dem_y, dem_z, z_topo, z_bathy, n_dem)
+   call read_dem(settings, coastLine, dem_x, dem_y, dem_z, z_topo, z_bathy, n_dem)
+
+   print*, ' '
+   print*, 'Y este es n_dem en main despues de read_dem ', n_dem
+   print*, ' '
+   print*, ' - - - - - - -  -  -  -  -  -  -  -  -  -  '
 
 
    print*, "Esto es DEM en km UTM "
@@ -98,7 +103,18 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Recenter
    !---------------------------------------------------
-   call recenter_all(n_edi_files, n_dem, x0, y0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
+   call recenter_all(coastLine, n_edi_files, n_dem, x0, y0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
+
+      print*, ' '
+      print*, ' '
+      print*, ' '
+      print*, ' Despues de centarar desde main'
+      print*, coastLine%x(1:5)
+      print*, ' '
+      print*, coastLine%y(1:5)
+      print*, ' '
+      print*, ' '
+      print*, ' '
 
    print*, "METROS Esto es DEM in UTM despues de CENTRAR"
    print'(4(F15.5))', dem_x_km(1), dem_y_km(1), dem_z_km(1)
@@ -110,15 +126,16 @@ program femtic_mesh_driver
    ! print'(A,f15.5)', "Esto es despues de snap_sites: ", fix_elev_site(2)
    print*,' '
    ! call check_domain(dem_x_km, dem_y_km, settings)
-   call check_domain(dem_x_km, dem_y_km, dem_z_km,  n_dem, settings)
+   ! call check_domain(dem_x_km, dem_y_km, dem_z_km,  n_dem, settings)
 
    ! !Write files in mesh coordinates centered at anchor point
    call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
    call define_analysis_domain(settings)
 
-   call write_topography(settings, coastlineOBJ%has_sea , dem_x_km, dem_y_km, z_topo, n_dem)
-   call write_bathymetry(settings, coastlineOBJ%has_sea , dem_x_km, dem_y_km, z_bathy, n_dem)
-   ! call write_coast_line(settings, coastlineOBJ%has_sea )
+
+   call write_topography(settings, coastline%has_sea , dem_x_km, dem_y_km, z_topo, n_dem)
+   call write_bathymetry(settings, coastLine%has_sea , dem_x_km, dem_y_km, z_bathy, n_dem)
+   call write_coast_line(settings, coastLine )
    ! print*,' '
    ! print*,' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
    ! ! print*, '        site_z_km                      fix_elev_site'
@@ -135,6 +152,7 @@ program femtic_mesh_driver
    call write_obs_sites(site_x_km, site_y_km, site_z_km, n_edi_files, paramRefi)
    ! print'(A50,F15.5)', 'Esto es fix_elev_site antes de resistivity_attribute', fix_elev_site(1)
    call resistivitty_attribute(n_sites, site_x_km, site_y_km, site_z_km, settings, globRefi, regions)
+
 
    stop
    call run_makeTetraMesh_and_assign_regions(regions)
@@ -684,7 +702,7 @@ contains
       write (iu, 101) 'INTERPOLATE'
       write (iu, '(F0.2)') 100.0d0
       write (iu, '(I0)') 6
-      write (iu, '(ES0.4)') 1.0d-6
+      write (iu, '(ES12.4)') 1.0d-6
 
       write (iu, 101) 'ALTITUDE'
       write (iu, 101) OBJsettings%topography_file
@@ -703,6 +721,7 @@ contains
       !-----------------------------------------
       close (iu)
 101   format(A)
+      102 format(ES12.4)
 
    end subroutine control_mesh
 !=========================================================
@@ -929,12 +948,10 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   ! subroutine read_dem(OBJsettings, OBJcoastLine, x, y, z, topo, bathy, nDEMpoints)
-   subroutine read_dem(OBJsettings, x, y, z, topo, bathy, nDEMpoints)
+   subroutine read_dem(OBJsettings, CoastLineOBJ, x, y, z, topo, bathy, nDEMpoints)
 
       use mesh_config
       use geo_utils, only: lat_long_to_UTM_km, debug_coastline, ray_casting
-      ! use coast_line, only: coastLine_generation
       use class_CoastLine
       implicit none
 
@@ -961,6 +978,14 @@ end subroutine surface_ellipsoids
             end do
 10          rewind (iu)
 
+      PRINT*, ' '
+      PRINT*, ' '
+      PRINT*, ' '
+            print*, "Esto es nDEMpoints dentro de read_dem            ", nDEMpoints
+
+      PRINT*, ' '
+      PRINT*, ' '
+      PRINT*, ' '
             allocate (long(nDEMpoints), lat(nDEMpoints), elev(nDEMpoints))
             do i = 1, nDEMpoints
                read (iu, *) longg, latt, elevv
@@ -1032,68 +1057,44 @@ end subroutine surface_ellipsoids
       select case (CoastLineOBJ%has_sea)
          case ("yes")
          
-         !Calling the object CoastLineOBJ to generate the Coast Line polygon in UTM x = north
-         call CoastLineOBJ%generate(OBJsettings,x, y, z,nDEMpoints)
+            !Calling the object CoastLineOBJ to generate the Coast Line polygon in UTM x = north
+            call CoastLineOBJ%generate(OBJsettings,x, y, z,nDEMpoints)
 
-         pause
-         ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
-         allocate(is_land(nDEMpoints))
+            ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
+            allocate(is_land(nDEMpoints))
 
-         call ray_casting(CoastLineOBJ%x, CoastLineOBJ%y, CoastLineOBJ%npoints, x, y, z, nDEMpoints, is_land)
+            call ray_casting(CoastLineOBJ%closedX, CoastLineOBJ%closedY, CoastLineOBJ%npoinclose, x, y, z, nDEMpoints, is_land)
 
-         ! Paso 3: corregir elevaciones ambiguas
-         do i = 1, nDEMpoints
-            if (is_land(i) .and. z(i) < 0.0_dp) z(i) =  0.001_dp  ! cuenca/valle bajo
-            if (.not. is_land(i) .and. z(i) > 0.0_dp) z(i) = -0.001_dp  ! artefacto marino
-         end do
+            ! Paso 3: corregir elevaciones ambiguas
+            do i = 1, nDEMpoints
+               if (is_land(i) .and. z(i) < 0.0_dp) z(i) =  0.001_dp  ! cuenca/valle bajo
+               if (.not. is_land(i) .and. z(i) > 0.0_dp) z(i) = -0.001_dp  ! artefacto marino
+            end do
 
 
-         !Assigning elevations to topo and marin deepths to bathymetry but these last, as positive value
-         do i = 1, nDEMpoints
-               !is_land(i) .eq. .true.
-            if (is_land(i) ) then
-               topo(i)  = z(i)
-               bathy(i) = -0.001_dp
-            else
-               topo(i)  = -0.001_dp
-               bathy(i) = -z(i)   ! positive deepth 
-            end if
-         end do
+            !Assigning elevations to topo and marin deepths to bathymetry but these last, as positive value
+            do i = 1, nDEMpoints
+                  !is_land(i) .eq. .true.
+               if (is_land(i) ) then
+                  topo(i)  = z(i)
+                  bathy(i) = -0.001_dp
+               else
+                  topo(i)  = -0.001_dp
+                  bathy(i) = -z(i)   ! positive deepth 
+               end if
+            end do
 
-      !       nCoastLine = 0 
-      !       do i = 1, size(z, dim=1), 1
-      !          if (abs(z(i)) .le. 1) then
-      !          ! if ( (z(i) .eq. -9999) .or. (z(i) .eq. -8888) ) then
-      !             nCoastLine = nCoastLine + 1
-      !          endif
-      !       end do
-      !       OBJcoastLine%nPoints = nCoastLine
-      !
-      !       allocate(OBJcoastLine%x(nCoastLine))
-      !       allocate(OBJcoastLine%y(nCoastLine))
-      !       allocate(OBJcoastLine%z(nCoastLine))
-      !
-      !       k = 0
-      !       do i = 1, size(z, dim=1), 1
-      !          ! if ( (z(i) .eq. -9999) .or. (z(i) .eq. -8888) ) then
-      !          if (abs(z(i)) .le. 1) then
-      !             k = k + 1
-      !             OBJcoastLine%x(k) = x(i)
-      !             OBJcoastLine%y(k) = y(i)
-      !             OBJcoastLine%z(k) = z(i)
-      !          endif
-      !       end do
-      !
          case ("no")
             topo = z
             bathy = -0.001_dp
          case default
             print*, 'DEM have to be specified if has or not Sea'
+            stop
       end select
 
-      ! call nearest_neighbor_ordering(OBJcoastLine)
-
       !At the end of this routine, the DEM and Coast Line are in KM UTM and both x points to North
+      print*, "Size de topo", size(topo)
+      print*, "Size de bathy", size(bathy)
 
    end subroutine read_dem
 !=========================================================
@@ -1647,11 +1648,15 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine recenter_all(Nsites, nDEM, xCenter, yCenter, siteCord_x, siteCord_y, siteCord_z, demx, demY, demZ)
-      integer, intent(in)    :: Nsites, nDEM
+   subroutine recenter_all(OBJcoastLine, Nsites, nDEM, xCenter, yCenter, siteCord_x, siteCord_y, siteCord_z, demx, demY, demZ)
+
+     use class_CoastLine 
+
+      type(Coast_Line), intent(inout) :: OBJcoastLine
+      integer,  intent(in)    :: Nsites, nDEM
       real(dp), intent(in)    :: xCenter, yCenter
-      real(dp), intent(inout):: siteCord_x(Nsites), siteCord_y(Nsites), siteCord_z(Nsites)
-      real(dp), intent(inout):: demX(nDEM), demY(nDEM), demZ(nDEM)
+      real(dp), intent(inout) :: siteCord_x(Nsites), siteCord_y(Nsites), siteCord_z(Nsites)
+      real(dp), intent(inout) :: demX(nDEM), demY(nDEM), demZ(nDEM)
 
       ! siteCord_z = siteCord_z + 10d0
       ! print*,"Esto es antes de recentrar"
@@ -1661,6 +1666,12 @@ end subroutine surface_ellipsoids
       ! print*,zCenter
       ! pause
 
+      print*, ' '
+      print*, ' Antes de centarar '
+      print*, OBJcoastLine%x(1:5)
+      print*, ' '
+      print*, OBJcoastLine%y(1:5)
+
       siteCord_x(:) = siteCord_x(:) - xCenter
       siteCord_y(:) = siteCord_y(:) - yCenter
       siteCord_z(:) = siteCord_z(:) !- zCenter
@@ -1669,6 +1680,13 @@ end subroutine surface_ellipsoids
       demX(:) = demX(:) - xCenter
       demY(:) = demY(:) - yCenter
       demZ(:) = demZ(:)! - zCenter
+
+      OBJcoastLine%x = OBJcoastLine%x - xCenter
+      OBJcoastLine%y = OBJcoastLine%y - yCenter
+
+      OBJcoastLine%closedX = OBJcoastLine%closedX - xCenter
+      OBJcoastLine%closedY = OBJcoastLine%closedY - yCenter
+
 
       ! do i = 1, nDEM
       !    if (abs(demZ(i)) < 1.0d-17) demZ(i) = 0.0d0
@@ -1890,20 +1908,20 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
       do i = 1, n
-         if (has_sea .eq. 'no') then
+         ! if (has_sea .eq. 'no') then
             ! Caso SIN mar: todo es tierra
             write (iu, '(3F15.5)') x(i), y(i), z(i)
-         else
+         ! else
             ! Caso CON mar
-            write (iu, '(3F15.5)') x(i), y(i), z(i)
-         end if
+            ! write (iu, '(3F15.5)') x(i), y(i), z(i)
+         ! end if
       end do
       close (iu)
    end subroutine
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_bathymetry(OBJsettings, has_sea, x, y, z, n)
+   subroutine write_bathymetry(OBJsettings, has_sea, x, y, z, npoints)
 
       implicit none
       TYPE(MeshSettings), INTENT(IN) :: OBJsettings
@@ -1912,19 +1930,19 @@ end subroutine surface_ellipsoids
 
       real(dp), intent(in):: x(:), y(:), z(:)
       ! real(dp), INTENT(INOUT) :: z(:)
-      integer, intent(in):: n
+      integer, intent(in):: npoints
       integer:: j, iu
 
       ! z = z/1000.0d0
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%bathymetry_file, status='replace')
-      do j = 1, n
-         if (has_sea .eq. 'no') then
+      do j = 1, npoints
+         ! if (has_sea .eq. 'no') then
             ! Caso SIN mar: no hay batimetría
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
-         else
-            write (iu, '(3F15.5)') x(j), y(j), -z(j)
-         end if
+         ! else
+            ! write (iu, '(3F15.5)') x(j), y(j), z(j)
+         ! end if
       end do
       close (iu)
    end subroutine
@@ -1932,69 +1950,65 @@ end subroutine surface_ellipsoids
 !=======
 !=========================================================
    ! subroutine write_coast_line(CoastLineOBJ, OBJsettings, OBJcoastLine)
-   ! subroutine write_coast_line(OBJsettings, OBJcoastLine)
-   !
-   !    use geo_utils, only: debug_coastline
-   !    use class_CoastLine
-   !
-   !    implicit none
-   !    type(MeshSettings),  INTENT(IN) :: OBJsettings
-   !    type(Coast_Line),     INTENT(IN) :: OBJcoastLine
-   !
-   !    ! type(Coast_Line),  INTENT(IN) :: CoastLineOBJ
-   !
-   !    real(dp), dimension(:,:), allocatable  :: simplified_curve
-   !    real(dp), dimension(2)                 :: p1_ext, pn_ext
-   !    integer:: iu, npoint_simple, npts 
-   !    integer :: i
-   !
-   !    ! xmin = OBJsettings%xminDOM - OBJsettings%pad_x
-   !    ! xmax = OBJsettings%xmaxDOM + OBJsettings%pad_x
-   !    ! ymin = OBJsettings%yminDOM - OBJsettings%pad_y
-   !    ! ymax = OBJsettings%ymaxDOM + OBJsettings%pad_y
-   !
-   !       open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
-   !    if (OBJcoastLine%has_sea .eq. 'no') then
-   !       ! open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
-   !       write (iu, *) 1
-   !       write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xminDOM - 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
-   !       write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xmaxDOM + 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
-   !       write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xmaxDOM + 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 0, 0
-   !       write (iu, '(2(F21.15, 1X), 2I2)') OBJsettings%xminDOM - 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 1, 0
-   !       ! close (iu)
-   !    else
-   !       print*, 'Sea case not implemented yet'
-   !
-   !       pause
-   !       ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
-   !
-   !       pause
-   !
-   !       ! call read_simplifiedCurve(npoint_simple, simplified_curve)
-   !       ! call closing_coast_line(npoint_simple, simplified_curve, p1_ext, pn_ext)
-   !       ! npts = npoint_simple
-   !       !
-   !       ! write(iu,*) 1
-   !       !
-   !       ! ! first extended point
-   !       ! write(iu,'(2(F21.15,1X),2I2)') p1_ext(1), p1_ext(2), 0, 0
-   !       !
-   !       ! ! original coastline
-   !       ! do i = 1, npts-1
-   !       !    write(iu,'(2(F21.15,1X),2I2)') simplified_curve(i,1), simplified_curve(i,2), 0, 0
-   !       ! end do
-   !       !
-   !       ! ! last original point closes polyline
-   !       ! write(iu,'(2(F21.15,1X),2I2)') simplified_curve(npts,1), simplified_curve(npts,2), 0, 0
-   !       !
-   !       ! ! final extended point with closure flag
-   !       ! write(iu,'(2(F21.15,1X),2I2)') pn_ext(1), pn_ext(2), 1, 0
-   !       !
-   !
-   !
-   !    end if
-   !       close (iu)
-   ! end subroutine write_coast_line
+   subroutine write_coast_line(OBJsettings, OBJcoastLine)
+      !
+      ! As FEMTIC Manual sugest, (File format of coast_line.dat) it  must be defined the points of land-sea or land-lake boundaries
+      ! in the order that the LAND LOCATES ON THE RIGHT-HAND side.
+      !
+      ! Due to GDAL library extracts the coast line from Nort to South then walking "on" the coast  line the land is
+      ! located at the left. Then, to accomplish to FEMTIC requeriments, then we invert the order of the points starting from
+      ! south to north 
+      
+
+      use geo_utils, only: debug_coastline
+      use class_CoastLine
+
+      implicit none
+      type(MeshSettings),  INTENT(IN) :: OBJsettings
+      type(Coast_Line),     INTENT(IN) :: OBJcoastLine
+      character(len=20) :: plot_file, plot_mtif
+
+      integer:: iu, i , iiu
+
+
+      plot_file = OBJsettings%coastLine_file
+      plot_file = trim(plot_file)
+      plot_mtif = plot_file(:len_trim(plot_file) - 4)//"_mtif.dat"
+
+      open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
+      ! open (newunit=iiu, file=trim(outdir)//trim(plot_mtif), status='replace')
+      if (OBJcoastLine%has_sea .eq. 'no') then
+         ! open (newunit=iu, file=trim(outdir)//OBJsettings%coastLine_file, status='replace')
+         write (iu, *) 1
+         write (iu, 100) OBJsettings%xminDOM - 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
+         write (iu, 100) OBJsettings%xmaxDOM + 5.0d0, OBJsettings%yminDOM - 5.0d0, 0, 0
+         write (iu, 100) OBJsettings%xmaxDOM + 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 0, 0
+         write (iu, 100) OBJsettings%xminDOM - 5.0d0, OBJsettings%ymaxDOM + 5.0d0, 1, 0
+         ! close (iu)
+      else
+
+        ! Caso CON mar: escribir la linea de costa abierta
+         ! write(iu, *) 1   ! numero de boundaries
+         ! do i = OBJcoastLine%npoints, 2, -1              ! sur → penúltimo punto, flag=0
+         !    write(iu, 100) OBJcoastLine%closedX(i), OBJcoastLine%closedY(i), 0, 0
+         ! end do
+         ! write(iu, 100) OBJcoastLine%closedX(1), OBJcoastLine%closedY(1), -1, 0 ! norte, flag=-1
+
+
+         !This file is just for MTIF check plotting
+         write(iu, *) 1   ! numero de boundaries
+         do i = 1, OBJcoastLine%npoinclose -1
+            write(iu, 100) OBJcoastLine%closedX(i), OBJcoastLine%closedY(i), 0, 0
+         end do
+         ! Ultimo punto: end_flag = 1 (boundary cerrado)
+         write(iu, 100) OBJcoastLine%closedX(OBJcoastLine%npoinclose ), OBJcoastLine%closedY(OBJcoastLine%npoinclose ), 1, 0
+
+      end if
+         close (iu)
+         ! close (iiu)
+
+      100 format(2(F21.15, 1X), 2I2 )
+   end subroutine write_coast_line
 !=========================================================
 !=======
 !=========================================================
@@ -2864,7 +2878,7 @@ end subroutine surface_ellipsoids
       call execute_command_line('echo "running tetgen --> 📐 Building 2D Mesh including topography"')
       ! call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly > meshtranTetGen.log 2>&1', &
       ! call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAak -S0  output.poly > meshtran_S0_TetGen.log 2>&1', &
-      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq -S0 output.poly > meshtranTetGen_0dot5_.log 2>&1', &
+      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq -S0 output.poly > meshtranTetGen.log 2>&1', &
                                 wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: tetgen execution failed'
