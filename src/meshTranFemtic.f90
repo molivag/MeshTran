@@ -154,7 +154,6 @@ program femtic_mesh_driver
    call resistivitty_attribute(n_sites, site_x_km, site_y_km, site_z_km, settings, globRefi, regions)
 
 
-   stop
    call run_makeTetraMesh_and_assign_regions(regions)
    call run_TETGEN_and_refine_mesh(globRefi)
    call run_TetGen2Femtic(settings, globRefi)
@@ -720,7 +719,7 @@ contains
       ! Cerrar archivo
       !-----------------------------------------
       close (iu)
-101   format(A)
+
       102 format(ES12.4)
 
    end subroutine control_mesh
@@ -1908,7 +1907,7 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
       do i = 1, n
-         ! if (has_sea .eq. 'no') then
+         ! if (z(i) .gt. 0.00) then
             ! Caso SIN mar: todo es tierra
             write (iu, '(3F15.5)') x(i), y(i), z(i)
          ! else
@@ -1937,7 +1936,7 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%bathymetry_file, status='replace')
       do j = 1, npoints
-         ! if (has_sea .eq. 'no') then
+         ! if (z(j) .gt. 0.00) then
             ! Caso SIN mar: no hay batimetría
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
          ! else
@@ -1988,15 +1987,17 @@ end subroutine surface_ellipsoids
       else
 
         ! Caso CON mar: escribir la linea de costa abierta
-         ! write(iu, *) 1   ! numero de boundaries
-         ! do i = OBJcoastLine%npoints, 2, -1              ! sur → penúltimo punto, flag=0
-         !    write(iu, 100) OBJcoastLine%closedX(i), OBJcoastLine%closedY(i), 0, 0
+         ! write(iiu, *) 1   ! numero de boundaries
+         ! ! do i = OBJcoastLine%npoints, 2, -1              ! sur → penúltimo punto, flag=0
+         ! do i = 1, OBJcoastLine%npoinclose -1
+         !    write(iiu, 100) OBJcoastLine%closedX(i), OBJcoastLine%closedY(i), 0, 0
          ! end do
-         ! write(iu, 100) OBJcoastLine%closedX(1), OBJcoastLine%closedY(1), -1, 0 ! norte, flag=-1
-
+         ! write(iiu, 100) OBJcoastLine%closedX(1), OBJcoastLine%closedY(1), 1, 0 ! norte, flag=-1
+         !
 
          !This file is just for MTIF check plotting
          write(iu, *) 1   ! numero de boundaries
+         ! do i = OBJcoastLine%npoints, 2, -1              ! sur → penúltimo punto, flag=0
          do i = 1, OBJcoastLine%npoinclose -1
             write(iu, 100) OBJcoastLine%closedX(i), OBJcoastLine%closedY(i), 0, 0
          end do
