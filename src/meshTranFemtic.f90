@@ -679,17 +679,17 @@ contains
       write (iu, 101) 'INTERPOLATE'
       write (iu, '(F0.2)') 100.0d0
       write (iu, '(I0)') 6
-      write (iu, '(ES0.4)') 1.0d-6
+      write (iu, 102) 1.0d-6
 
       write (iu, 101) 'ALTITUDE'
       write (iu, 101) OBJsettings%topography_file
       write (iu, '(F5.3)') 0.0d0
-      write (iu, '(ES0.4)') 1.0d10
+      write (iu, 102) 1.0d10
 
       write (iu, 101) 'SEA_DEPTH'
       write (iu, 101) OBJsettings%bathymetry_file
       write (iu, '(F5.3)') 0.0d0
-      write (iu, '(ES0.4)') 1.0d10
+      write (iu, 102) 1.0d10
 
       write (iu, 101) 'END'
 
@@ -698,6 +698,9 @@ contains
       !-----------------------------------------
       close (iu)
 101   format(A)
+
+      101   format(A)
+      102 format(ES12.4)
 
    end subroutine control_mesh
 !=========================================================
