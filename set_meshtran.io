@@ -8,28 +8,29 @@
 MESH_NATURE = native
 THREADS = 18
 
-DEM_FILE = MET_50m_mosaic_valles_Lcosta_cropped.xyz
-__DEM_FILE = TOTPO_KAL_BBMT_FLAT_475m.xyz
-DEM_LatLon = no 
+__DEM_FILE = MET_50m_mosaic_valles_Lcosta_cropped.xyz
+DEM_FILE = gebco.xyz
+DEM_LatLon = yes 
 DEM_UNITS = meters                    !meters or kilometers
 assumming elevation in meters
+HAS_SEA = yes
+SEA_LEVEL = 0.0
+
 
 TOPO_FILE = topography_for.dat 
 BATHY_FILE = bathymetry_for.dat
 COSLI_FILE = coast_line.dat
 
-XMIN_DOM = -32.0
-XMAX_DOM =  20.0
-YMIN_DOM = -25.0
-YMAX_DOM =  30.0
-ZMIN_DOM = -50.0
-ZMAX_DOM =  50.0
+XMIN_DOM = -60.0
+XMAX_DOM =  140.0
+YMIN_DOM = -180.0
+YMAX_DOM =  120.0
+ZMIN_DOM = -150.0
+ZMAX_DOM =  300.0
 
 PAD_X = 5.0
 PAD_Y = 5.0
 
-HAS_SEA = yes
-SEA_LEVEL = 0.0
 
 ## =>  Observation data
 IN_diag_ERR = 0.10
@@ -43,11 +44,11 @@ FMAX = 00
 
 
 ## =>  Ellipsoids Surface Mesh
-NUM_ELIPSES = 5
+NUM_ELIPSES = 10
 SITEpadding = 4.0        ! Margen extra sobre el radio de los sites (km)
-FARelemSIZE = 15.0        ! Tamaño máximo de triángulo en el borde (km) OBJparamRefi%sizeBoundary
-SURF_RESOLUTION = 5.0     ! len en el centro (km) OBJparamRefi%coreResol
-GROWTH = 1.0              ! Cuánto aumenta 'len' en cada elipse hacia afuera
+FARelemSIZE = 30.0        ! Tamaño máximo de triángulo en el borde (km) OBJparamRefi%sizeBoundary
+SURF_RESOLUTION = 0.9     ! len en el centro (km) OBJparamRefi%coreResol
+GROWTH = 2.0              ! Cuánto aumenta 'len' en cada elipse hacia afuera
 
 ## => Meshing for sites at the surface
 NUM_ESFERAS = 10
@@ -64,13 +65,13 @@ HIGH_RESOL_LAYER = 1.6    !thikness of high resolution from surface = HRL*TargDe
 V_PADDING = 2.3           !vertical extension beyond the refinement
 
 
-NEAR_FIELD_RESOL = 4      !min elem size at sites (core_resolution)
-FAR_FIELD_RESOL =  10     !max elem size 
+NEAR_FIELD_RESOL = 6      !min elem size at sites (core_resolution)
+FAR_FIELD_RESOL =  50     !max elem size 
 
-ITER_TET_REFI = 7
+ITER_TET_REFI = 2
 
 !esto controla radio a en makeMTR
-H_PADDING = 30             !horizontal extension (in deep) beyond last site, a1 = max_distance_site x H_PADDING 
+H_PADDING = 40             !horizontal extension (in deep) beyond last site, a1 = max_distance_site x H_PADDING 
 TARGET_DEPTH = 15
 
 
@@ -90,9 +91,10 @@ FRAC_SKIN_DEPTH = 5.55    !No quiero que el tamaño de elemento (o parámetro) s
 ELLIPSES = 9 
 REGIONS = 3
 
-LOCATION = 0.0 0.0 -20.0    -15.0 15.0  2.0    0.0 0.0 45.0       	  !xyz xyz  xyz
+LOCATION = 0.0 0.0 -20.0    -50.0 50.0  1.0    0.0 0.0 45.0       	  !xyz xyz  xyz
 ID_REGION =     10               20                 30	    		         !reg1 reg2
-RHO_REGIONS =   1.0e9          0.01                1.0e2		             !rho1 rho2
+RHO_REGIONS =   1.0e9          0.003                1.0e2		             !rho1 rho2
+
 REP_PARTITION = -1              -1                   9           
 FIX_RESISTIVITY = 1              1                   0           
 

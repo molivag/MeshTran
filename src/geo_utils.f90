@@ -88,26 +88,31 @@ module geo_utils
 !=========================================================
 !=======
 !=========================================================
-   subroutine debug_coastline(orderedX, orderedY, n)
+   subroutine debug_coastline(east, north, n)
+      !
+      ! This routine receive a east and north variables in km UTM to plot the DEM and Coast Line together
+      !
 
       implicit none
 
       integer, intent(in) :: n
-      real(8), intent(in) :: orderedX(n)
-      real(8), intent(in) :: orderedY(n)
+      real(8), intent(in) :: east(n)
+      real(8), intent(in) :: north(n)
 
       integer :: i, stat
-      character(len=10) :: answer
+      character(len=20) :: answer, filename
       character(len=256) :: cmd
-
+      character(len=1) :: q
+      q = "'"
       !----------------------------------------
       ! write temporary coastline
       !----------------------------------------
 
-      open(unit=99, file='./preprocessing/geometry/coast_debug.xy', status='replace')
+      filename = "coast_debug.xyz"
+      open(unit=99, file='./preprocessing/geometry/'//trim(filename), status='replace')
 
       do i = 1, n
-         write(99,*) orderedX(i), orderedY(i)
+         write(99,*) east(i), north(i)
       end do
 
       close(99)
@@ -116,11 +121,24 @@ module geo_utils
       ! launch gnuplot
       !----------------------------------------
 
+      
+      write(cmd,'(A)') &
+      'gnuplot -persist -e " ' // &
+      'set size ratio -1; ' // &
+      'plot ' // &
+      q // './preprocessing/DEM/UTM_gebco.xyz' // q // &
+      ' u 1:2:3 w dots palette notitle, ' // &
+      q // './preprocessing/geometry/coast_debug.xyz' // q // &
+      ' u 1:2 w lp lw 1 lc rgb ' // q // 'black' // q // ' title ' // q // 'Closed Coast' // q // &
+      '"'
 
+call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
       ! write (cmd, '(A)') gnuplot -persist -e 'plot "coast_debug.dat" w lp' '
       ! write(cmd,'(A)') 'gnuplot -persist -e "plot ''coast_debug.xy'' w lp"'
-      write(cmd,'(A)') 'gnuplot -persist -e "plot ''./preprocessing/geometry/coastline_simplified.dat'' w lp"'
-         call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+      ! write(cmd,'(A)') 'gnuplot -persist -e "plot './preprocessing/geometry/'//trim(filename)" w lp"'
+
+! write(cmd,'(A)') 'gnuplot -persist -e "plot ' // q //'./preprocessing/geometry/' // trim(filename) // q // ' w lp"'
+         ! call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR executing gnuplot'
 
       ! call execute_command_line( &
@@ -148,6 +166,98 @@ module geo_utils
       end if
 
    end subroutine
+!=========================================================
+!=======
+!=========================================================
+
+subroutine ray_casting(coast_x, coast_y, n_coast, dem_x, dem_y, dem_z, n_dem, is_land)
+
+   implicit none
+
+   integer,  intent(in) :: n_coast
+   real(dp), intent(in) :: coast_x(n_coast), coast_y(n_coast)
+   integer,          intent(in)  :: n_dem
+   real(dp),         intent(in)  :: dem_x(n_dem)   ! Norte (km)
+   real(dp),         intent(in)  :: dem_y(n_dem)   ! Este  (km)
+   real(dp),         intent(in)  :: dem_z(n_dem)   ! Elevacion (km)
+   logical,          intent(out) :: is_land(n_dem)
+
+   integer  :: i, j, cnt
+   real(dp) :: px, py, xi, yi, xj, yj
+   real(dp), parameter :: eps = 1.0d-10
+
+   print*, " "
+   print*, " ---> Running Ray Casting algorithm to clasify DEM"
+   print*, " "
+
+   do i = 1, n_dem
+      px  = dem_x(i)
+      py  = dem_y(i)
+      cnt = 0
+
+      do j = 1, n_coast - 1
+         xi = coast_x(j)
+         yi = coast_y(j)
+         xj = coast_x(j+1)
+         yj = coast_y(j+1)
+
+         if (ray_intersects_seg(px, py, xi, yi, xj, yj, eps)) &
+            cnt = cnt + 1
+      end do
+
+      is_land(i) = (mod(cnt, 2) /= 0)
+   end do
+
+contains
+
+   function ray_intersects_seg(px, py, ax, ay, bx, by, eps) result(intersect)
+      implicit none
+      real(dp), intent(in) :: px, py, ax, ay, bx, by, eps
+      logical :: intersect
+
+      real(dp) :: ppy, seg_ax, seg_ay, seg_bx, seg_by
+      real(dp) :: m_red, m_blue
+
+      ! A debe ser el punto con menor x (Norte)
+      if (ax > bx) then
+         seg_ax = bx;  seg_ay = by
+         seg_bx = ax;  seg_by = ay
+      else
+         seg_ax = ax;  seg_ay = ay
+         seg_bx = bx;  seg_by = by
+      end if
+
+      ! Evitar rayo sobre vertice
+      ppy = px
+      if (ppy == seg_ax .or. ppy == seg_bx) ppy = ppy + eps
+
+      intersect = .false.
+
+      if (ppy < seg_ax .or. ppy > seg_bx) return
+      if (py  > max(seg_ay, seg_by))       return
+
+      if (py < min(seg_ay, seg_by)) then
+         intersect = .true.
+         return
+      end if
+
+      if (abs(seg_bx - seg_ax) > tiny(1.0_dp)) then
+         m_red = (seg_by - seg_ay) / (seg_bx - seg_ax)
+      else
+         m_red = huge(1.0_dp)
+      end if
+
+      if (abs(px - seg_ax) > tiny(1.0_dp)) then
+         m_blue = (ppy - seg_ay) / (py - seg_ay)
+      else
+         m_blue = huge(1.0_dp)
+      end if
+
+      intersect = (m_blue >= m_red)
+
+   end function ray_intersects_seg
+
+end subroutine ray_casting
 
 end module geo_utils
 
