@@ -7,7 +7,9 @@ mod/
 computing/
 input_data/
 last_builMesh/
+assets/
 
+*.tex
 *.pvsm
 *.xyz
 *.dat
