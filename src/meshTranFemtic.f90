@@ -118,7 +118,7 @@ program femtic_mesh_driver
    ! call check_domain(dem_x_km, dem_y_km, dem_z_km,  n_dem, settings)
 
    ! !Write files in mesh coordinates centered at anchor point
-   call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
+   call generate_observe_dat(siteSettings, edi_files, n_edi_files, site_x_km, site_y_km)
    call define_analysis_domain(settings)
 
 
@@ -223,13 +223,6 @@ contains
          case ('TOPO_FILE')
             OBJsettings%topography_file = trim(val)
 
-         case ('KEYWORD_LAT')
-            OBJsiteSettings%lat_keyword = trim(val)
-
-         case ('KEYWORD_LONG')
-            OBJsiteSettings%long_keyword = trim(val)
-            
-
          case ('BATHY_FILE')
             OBJsettings%bathymetry_file = trim(val)
 
@@ -238,7 +231,6 @@ contains
 
          case ('HAS_SEA')
             OBJcoastLine%has_sea = trim(val)
-            ! read (val, *) OBJcoastLine%has_sea
 
          case ('SEA_LEVEL')
             read (val, *) OBJcoastLine%sea_level
@@ -447,8 +439,41 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine generate_observe_dat(EDIfiles, n_files, site_x, site_y)
+   function get_site_name(filepath) result(site_name)
+      !
+      ! Extrae el nombre del sitio del path completo del EDI
+      ! Ejemplo: preprocessing/edi_files/GV001.edi → GV001
+      !
       implicit none
+      character(len=*),  intent(in) :: filepath
+      character(len=256)            :: site_name
+      integer :: k, p
+
+      ! 1. Quitar path — buscar ultimo '/'
+      p = 0
+      do k = len_trim(filepath), 1, -1
+         if (filepath(k:k) == '/') then
+            p = k
+            exit
+         end if
+      end do
+      site_name = filepath(p+1:len_trim(filepath))
+
+      ! 2. Quitar extension .edi
+      k = index(site_name, '.edi')
+      if (k > 0) site_name = site_name(1:k-1)
+
+   end function get_site_name
+!=========================================================
+!=======
+!=========================================================
+   subroutine generate_observe_dat(OBJobserveSettings, EDIfiles, n_files, site_x, site_y)
+
+      use geo_utils, only: write_edi_site_tmp, plot_edi_site
+
+      implicit none
+
+      type(ObserveSettings), intent(in) :: OBJobserveSettings
       integer, intent(in) :: n_files
       character(len=*), intent(in) :: EDIfiles(n_files)
       real(dp), intent(in) :: site_x(n_files), site_y(n_files)
@@ -528,11 +553,24 @@ contains
 
          ! 6. Apply conjugate to accomplish FEMTIC time dependence exp(-iωt)
          call apply_complex_conjugate(nf, zi)
-         ! 6. Calcular Error Floor (basado en el 5% y 20%)
-         call apply_error_floor(nf, zr, zi, sdSI, zerr)
+
+
+         select case (trim(OBJobserveSettings%error_tratement))
+            case ("floor")
+               ! 7. Calcular Error Floor (basado en el 5% y 20%)
+               call apply_error_floor(nf, zr, zi, sdSI, zerr)
+         
+            case("assigned")
+               ! 7. Calcular Error Floor (basado en el 5% y 20%)
+               call assign_percent_error(OBJobserveSettings, nf,zr,zi, zerr)
+            
+            case default
+               print*, 'Error: error_tratement in input file must be floor or assigned'
+               ERROR STOP
+         end select
          ! ---------------------------------
 
-         ! 7. Lógica de Subsampling
+         ! 8. Lógica de Subsampling
          mask = .true.    ! Por defecto todas se quedan
          nf_final = nf ! Por defecto el número final es el del EDI
 
@@ -548,13 +586,13 @@ contains
             end do
          end if
 
-         ! 8. Escritura condicionada
+         ! 9. Escritura condicionada
          ! Si nf_final es 0 porque el rango fue muy estricto, avisar
          if (nf_final == 0) then
             print *, "Aviso: Estación ", trim(EDIfiles(i)), " no tiene frecuencias en el rango."
          end if
 
-         ! 9. Escribir bloque de estación en observe.dat
+         ! 10. Escribir bloque de estación en observe.dat
          ! Formato: ID_est, ID_H_field, X, Y (en km o m según tu malla)
          write (unit_out, '(I6, I6, 1x, 2F12.5)') i, i, site_x(i), site_y(i)
          write (unit_out, '(I6)') nf_final
@@ -565,16 +603,15 @@ contains
                ! Error = sqrt(Varianza)
                write (unit_out, '(F12.5, 1x, 16(1x, ES12.5))') &
                   freq(j), &
-                  zr(j, 1), zi(j, 1), zr(j, 2), zi(j, 2), &
-                  zr(j, 3), zi(j, 3), zr(j, 4), zi(j, 4), &
-                  zerr(j, 1), zerr(j, 1), & ! Error XX (R e I)
-                  zerr(j, 2), zerr(j, 2), & ! Error XY
-                  zerr(j, 3), zerr(j, 3), & ! Error YX
-                  zerr(j, 4), zerr(j, 4)   ! Error YY
+                  zr(j, 1), zi(j, 1), zr(j, 2), zi(j, 2), zr(j, 3), zi(j, 3), zr(j, 4), zi(j, 4), &
+                  zerr(j, 1), zerr(j, 1), zerr(j, 2), zerr(j, 2), &
+                  zerr(j, 3), zerr(j, 3), zerr(j, 4), zerr(j, 4)   ! Error YY
             end if
          end do
 
          ! deallocate (freq, zr, zi, zvar, mask)
+         call write_edi_site_tmp('/tmp/'//trim(get_site_name(EDIfiles(i)))//'.dat', nf, freq, zr, zi, zerr, mask)
+         call plot_edi_site(get_site_name(EDIfiles(i)))
          deallocate (freq, zr, zi, zvar, zerr, sdSI, mask)
          close (unit_in)
 
@@ -619,7 +656,7 @@ contains
       sd_sigma = sqrt(zvar)
 
       mu0 = 4.0d0*PI*1.0E-7
-      scale_factor = mu0*1.0E3  ! De mV/km/nT a V/m / A/m
+      scale_factor = mu0*1.0E3  ! De   mV/km/nT   a   (V/m) / (A/m)
 
       zr = zr*scale_factor
       zi = zi*scale_factor
@@ -627,6 +664,7 @@ contains
 
    end subroutine convert_EDI_file_units
 !=========================================================
+!=======
 !===========================================================
    subroutine apply_error_floor(nf, zr, zi, SD, zerr)
       integer, intent(in) :: nf
@@ -2996,7 +3034,8 @@ end subroutine surface_ellipsoids
       print*, ' '
          write (*, '(A,I0)') '      🔁 Refinement : ', r
          ! makeMtr output.$r
-         write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && makeMtr output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
+         write (cmd, '(A,I0, A)')&
+         'cd preprocessing/buildMesh/refinement && makeMtr output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in makeMtr'
 
