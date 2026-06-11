@@ -28,19 +28,9 @@ module mesh_config
 
 
    type ObserveSettings
+
+      character(len=10) :: lat_keyword, long_keyword
    end type
-
-
-   ! type :: CoastLine
-   !    character(len=5) :: has_sea
-   !    real, DIMENSION(:), allocatable  :: x
-   !    real, DIMENSION(:), allocatable  :: y
-   !    real, DIMENSION(:), allocatable  :: z
-   !    logical, allocatable             :: used(:)
-   !    real(dp) :: sea_level
-   !    integer  :: nPoints
-   !
-   ! end type
 
 
 end module mesh_config
