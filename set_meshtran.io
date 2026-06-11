@@ -8,8 +8,8 @@
 MESH_NATURE = native
 THREADS = 18
 
-__DEM_FILE = gebco.xyz
-DEM_FILE = GabbsValley_large.xyz
+DEM_FILE = gebco.xyz
+__DEM_FILE = GabbsValley_large.xyz
 DEM_LatLon = yes
 DEM_UNITS = meters                    !meters or kilometers, assumming elevation in meters
 HAS_SEA = no
@@ -32,11 +32,12 @@ PAD_Y = 5.0
 
 
 ## =>  Observation data
-IN_diag_ERR = 0.10
-OFF_diag_ERR = 0.05
+ERROR_TREATMENT = assigned                !floor or assigned
+IN_DIAG_ERR = 20
+OFF_DIAG_ERR = 5
 SUBSAMPLING = 0
 KEYWORD_LAT = LAT
-KEYWORD_LONG = LON
+KEYWORD_LONG = LONG
 
 ## => If subsampling is one, select the frequency range
 FMIN = 00
