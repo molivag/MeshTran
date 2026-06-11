@@ -30,6 +30,11 @@ module mesh_config
    type ObserveSettings
 
       character(len=10) :: lat_keyword, long_keyword
+      character(len=10) :: error_tratement
+
+      real(dp)          :: in_diag
+      real(dp)          :: off_diag
+
    end type
 
 
