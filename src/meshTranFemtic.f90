@@ -266,6 +266,26 @@ contains
 
          case ('PAD_Y')
             read (val, *) OBJsettings%pad_y
+         
+
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+            ! = = = =           EDI files keyword and error           = = = =
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+         case ('IN_DIAG_ERR')
+            read (val, *) OBJsiteSettings%in_diag
+
+         case ('OFF_DIAG_ERR')
+            read (val, *) OBJsiteSettings%off_diag
+
+         case ('ERROR_TREATMENT')
+            OBJsiteSettings%error_tratement = trim(val)
+
+         case ('KEYWORD_LAT')
+            OBJsiteSettings%lat_keyword = trim(val)
+
+         case ('KEYWORD_LONG')
+            OBJsiteSettings%long_keyword = trim(val)
+            
 
             ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
             ! = = = = refinement for sites at the surface and control = = = =
