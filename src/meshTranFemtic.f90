@@ -652,6 +652,37 @@ contains
    end subroutine apply_error_floor
 !=========================================================
 !=======
+!===========================================================
+   subroutine assign_percent_error(OBJobserveSettings, nf, zr, zi, zerr)
+      implicit none
+
+      type(ObserveSettings), intent(in) :: OBJobserveSettings
+      integer, intent(in) :: nf
+      real(dp), intent(in) :: zr(nf, 4), zi(nf, 4)
+      real(dp)              :: amp_xy, amp_yx, amp_xx, amp_yy, err_in, err_off
+      real(dp), intent(out) :: zerr(nf, 4)
+      integer  :: j
+
+      err_in  = REAL(OBJobserveSettings%in_diag , kind(1.e0)) /100.0d0
+      err_off = REAL(OBJobserveSettings%off_diag, kind(1.e0)) /100.0d0
+
+      do j = 1, nf
+         ! 1. Calculamos la amplitud individual de todas lascomponentes
+         amp_xx = sqrt(zr(j, 1)**2 + zi(j, 1)**2)
+         amp_xy = sqrt(zr(j, 2)**2 + zi(j, 2)**2)
+         amp_yx = sqrt(zr(j, 3)**2 + zi(j, 3)**2)
+         amp_yy = sqrt(zr(j, 4)**2 + zi(j, 4)**2)
+
+
+         ! Aplicamos los porcentajes de acuerdo al manual/femticPy
+         zerr(j, 1) = amp_xx * err_in   ! INdiag  ZXX (20%)
+         zerr(j, 2) = amp_xy * err_off  ! OFFdiag ZXY (5%)
+         zerr(j, 3) = amp_yx * err_off  ! OFFdiag ZYX (5%)
+         zerr(j, 4) = amp_yy * err_in   ! INdiag  ZYY (20%)
+      end do
+   end subroutine assign_percent_error
+!=========================================================
+!=======
 !=========================================================
    subroutine read_edi_block(unit, tag, n, values)
       integer, intent(in) :: unit, n
