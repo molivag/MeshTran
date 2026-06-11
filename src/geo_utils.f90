@@ -169,7 +169,6 @@ call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
 !=========================================================
 !=======
 !=========================================================
-
 subroutine ray_casting(coast_x, coast_y, n_coast, dem_x, dem_y, dem_z, n_dem, is_land)
 
    implicit none
@@ -258,6 +257,251 @@ contains
    end function ray_intersects_seg
 
 end subroutine ray_casting
+!=========================================================
+!=======
+!=========================================================
+subroutine write_edi_site_tmp(tmpfile, nf, freq, zr, zi, zerr, mask)
+   !
+   ! Escribe archivo temporal con datos del sitio para gnuplot
+   ! Columnas: freq Re_Zxy Im_Zxy SE_xy Re_Zyx Im_Zyx SE_yx
+   !                Re_Zxx Im_Zxx SE_xx Re_Zyy Im_Zyy SE_yy
+   !
+   implicit none
+   character(len=*), intent(in) :: tmpfile
+   integer,          intent(in) :: nf
+   real(dp),         intent(in) :: freq(nf)
+   real(dp),         intent(in) :: zr(nf,4), zi(nf,4), zerr(nf,4)
+   logical,          intent(in) :: mask(nf)
 
+   integer            :: j, unit_out, ios
+
+   open(newunit=unit_out, file=trim(tmpfile), &
+        status='replace', action='write', iostat=ios)
+   if (ios /= 0) then
+      print*, 'ERROR: No se pudo abrir archivo temporal ', trim(tmpfile)
+      error stop
+   end if
+
+   write(unit_out,'(A)') '# col1:freq  col2:Re_Zxy  col3:Im_Zxy  col4:SE_xy  &
+                          &col5:Re_Zyx  col6:Im_Zyx  col7:SE_yx   &
+                          &col8:Re_Zxx  col9:Im_Zxx  col10:SE_xx  &
+                          &col11:Re_Zyy col12:Im_Zyy col13:SE_yy'
+
+   do j = 1, nf
+      if (.not. mask(j)) cycle
+      write(unit_out, '(13(1x, ES14.6))') &
+         freq(j),                       &  ! col 1
+         zr(j,2), zi(j,2), zerr(j,2),  &  ! col 2,3,4   XY
+         zr(j,3), zi(j,3), zerr(j,3),  &  ! col 5,6,7   YX
+         zr(j,1), zi(j,1), zerr(j,1),  &  ! col 8,9,10  XX
+         zr(j,4), zi(j,4), zerr(j,4)      ! col 11,12,13 YY
+   end do
+
+   close(unit_out)
+
+end subroutine write_edi_site_tmp
+!=========================================================
+!=======
+!=========================================================
+! subroutine plot_edi_site(site_name)
+!    implicit none
+!    character(len=*), intent(in) :: site_name
+!
+!    integer             :: stat, iu
+!    character(len=512)  :: tmpfile, pdffile, gpfile
+!
+!    tmpfile = '/tmp/'//trim(site_name)//'.dat'
+!    pdffile = 'preprocessing/edi_sites/'//trim(site_name)//'.pdf'
+!    gpfile  = '/tmp/'//trim(site_name)//'.gp'
+!
+!    call execute_command_line('mkdir -p preprocessing/edi_sites', &
+!                               wait=.true., exitstat=stat)
+!
+!    !----------------------------------------------------------
+!    ! Escribir script gnuplot a archivo temporal
+!    !----------------------------------------------------------
+!    open(newunit=iu, file=trim(gpfile), status='replace')
+!
+!    write(iu,'(A)') 'set terminal pdfcairo enhanced color size 12,8 font "Helvetica,10"'
+!    write(iu,'(A)') 'set output "'//trim(pdffile)//'"'
+!    write(iu,'(A)') 'mu0 = 1.2566370614e-6'
+!    write(iu,'(A)') 'rho(f,Re,Im) = (1.0/(2.0*pi*f*mu0)) * (Re**2 + Im**2)'
+!    write(iu,'(A)') 'phase(Re,Im) = atan2(Im,Re) * 180.0/pi'
+!       !para las error bars
+! write(iu,'(A)') 'drho(f,Re,Im,SE) = (1.0/(pi*f*mu0)) * sqrt(Re**2+Im**2) * SE'
+! write(iu,'(A)') 'dphase(Re,Im,SE) = (SE / sqrt(Re**2+Im**2)) * 180.0/pi'
+!
+!    write(iu,'(A)') 'set multiplot layout 2,2 title "'//trim(site_name)//'"'
+!    write(iu,'(A)') 'set logscale x'
+!    write(iu,'(A)') 'set yrange [1e3:1e-3]'
+!    write(iu,'(A)') 'set xlabel "Frequency (Hz)"'
+!    write(iu,'(A)') 'set format x "10^{%T}"'
+!
+!    ! Panel (1,1): rho_a off-diagonal
+!    write(iu,'(A)') 'set logscale y'
+!    write(iu,'(A)') 'set yrange [0.5:3500]'
+!    write(iu,'(A)') 'set ylabel "$rho_a$ (Ohm·m)"'
+!    write(iu,'(A)') 'set title "Off-diagonal: rho_a XY & YX"'
+!
+!    ! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(rho($1,$2,$3)) w lp pt 4 lc rgb "purple" title "rho XY", \'
+!    ! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(rho($1,$5,$6)) w lp pt 6 lc rgb "red" title "rho YX"'
+! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(rho($1,$2,$3)):(drho($1,$2,$3,$4)) w yerrorbars pt 4 lc rgb "purple" title "rho XY", \'
+! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(rho($1,$5,$6)):(drho($1,$5,$6,$7)) w yerrorbars pt 6 lc rgb "red" title "rho YX"'
+!
+!    ! Panel (1,2): rho_a diagonal
+!    write(iu,'(A)') 'set title "Diagonal: rho_a XX & YY"'
+!    ! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(rho($1,$8,$9)) w lp pt 4 lc rgb "purple" title "rho XX", \'
+!    ! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(rho($1,$11,$12)) w lp pt 6 lc rgb "red" title "rho YY"'
+! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(rho($1,$8,$9)):(drho($1,$8,$9,$10)) w yerrorbars pt 4 lc rgb "purple" title "rho XX", \'
+! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(rho($1,$11,$12)):(drho($1,$11,$12,$13)) w yerrorbars pt 6 lc rgb "red" title "rho YY"'
+!
+!    ! Panel (2,1): fase off-diagonal
+!    write(iu,'(A)') 'unset logscale y'
+!    write(iu,'(A)') 'set yrange [-180:180]'
+!    write(iu,'(A)') 'set ytics 45'
+!    write(iu,'(A)') 'set ylabel "Phase (deg)"'
+!    write(iu,'(A)') 'set title "Off-diagonal: Phase XY & YX"'
+!    ! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(phase($2,$3)) w lp pt 4 lc rgb "purple" title "Phase XY", \'
+!    ! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(phase($5,$6)) w lp pt 6 lc rgb "red" title "Phase YX"'
+! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(phase($2,$3)):(dphase($2,$3,$4)) w yerrorbars pt 4 lc rgb "purple" title "Phase XY", \'
+! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(phase($5,$6)):(dphase($5,$6,$7)) w yerrorbars pt 6 lc rgb "red" title "Phase YX"'
+!
+!    ! Panel (2,2): fase diagonal
+!    write(iu,'(A)') 'set title "Diagonal: Phase XX & YY"'
+!    ! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(phase($8,$9)) w lp pt 4 lc rgb "purple" title "Phase XX", \'
+!    ! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(phase($11,$12)) w lp pt 6 lc rgb "red" title "Phase YY"'
+! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(phase($8,$9)):(dphase($8,$9,$10)) w yerrorbars pt 4 lc rgb "purple" title "Phase XX", \'
+! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(phase($11,$12)):(dphase($11,$12,$13)) w yerrorbars pt 6 lc rgb "red" title "Phase YY"'
+!
+!    write(iu,'(A)') 'unset multiplot'
+!    close(iu)
+!
+!    !----------------------------------------------------------
+!    ! Ejecutar gnuplot
+!    !----------------------------------------------------------
+!    call execute_command_line('gnuplot '//trim(gpfile), &
+!                               wait=.true., exitstat=stat)
+!    if (stat /= 0) then
+!       print*, 'ERROR: gnuplot fallo para sitio ', trim(site_name)
+!       error stop
+!    end if
+!
+!    !----------------------------------------------------------
+!    ! Borrar temporales
+!    !----------------------------------------------------------
+!    call execute_command_line('rm -f '//trim(tmpfile)//' '//trim(gpfile), &
+!                               wait=.true., exitstat=stat)
+!
+!    ! print*, '✅ PDF generado: ', trim(pdffile)
+!
+! end subroutine plot_edi_site
+subroutine plot_edi_site(site_name)
+   implicit none
+   character(len=*), intent(in) :: site_name
+
+   integer             :: stat, iu
+   character(len=512)  :: tmpfile, pdffile, gpfile
+
+   tmpfile = '/tmp/'//trim(site_name)//'.dat'
+   pdffile = 'preprocessing/edi_sites/'//trim(site_name)//'.pdf'
+   gpfile  = '/tmp/'//trim(site_name)//'.gp'
+
+   call execute_command_line('mkdir -p preprocessing/edi_sites', &
+                              wait=.true., exitstat=stat)
+
+   open(newunit=iu, file=trim(gpfile), status='replace')
+
+   ! Terminal
+   write(iu,'(A)') 'set terminal pdfcairo enhanced color size 12,8 font "Helvetica,10"'
+   write(iu,'(A)') 'set output "'//trim(pdffile)//'"'
+
+   ! Funciones
+   write(iu,'(A)') 'mu0 = 1.2566370614e-6'
+   write(iu,'(A)') 'rho(f,Re,Im) = (1.0/(2.0*pi*f*mu0)) * (Re**2 + Im**2)'
+   write(iu,'(A)') 'phase(Re,Im) = atan2(-Im,Re) * 180.0/pi'
+   write(iu,'(A)') 'drho(f,Re,Im,SE) = (1.0/(pi*f*mu0)) * sqrt(Re**2+Im**2) * SE'
+   write(iu,'(A)') 'dphase(Re,Im,SE) = (SE / sqrt(Re**2+Im**2)) * 180.0/pi'
+
+   ! Multiplot
+   write(iu,'(A)') 'set multiplot layout 2,2 title "'//trim(site_name)//'"'
+
+   ! Eje X comun
+   write(iu,'(A)') 'set logscale x'
+   ! write(iu,'(A)') 'set xrange [1e-3:1e3]'
+   write(iu,'(A)') 'set xrange [1e4:1e-4]'      !de altas a bajas freq
+   write(iu,'(A)') 'set mxtics 10'
+   write(iu,'(A)') 'set xlabel "Frequency (Hz)"'
+   write(iu,'(A)') 'set format x "10^{%T}"'
+
+   ! Grid punteado
+   write(iu,'(A)') 'set grid xtics ytics lt 0 lw 0.5 lc rgb "gray70"'
+
+   ! ============================================================
+   ! Panel (1,1): rho_a off-diagonal
+   ! ============================================================
+   write(iu,'(A)') 'set logscale y'
+   write(iu,'(A)') 'set yrange [0.5:10000]'
+   write(iu,'(A)') 'set ylabel "rho_a (Ohm·m)"'
+   write(iu,'(A)') 'set title "Off-diagonal: rho_a XY & YX"'
+   write(iu,'(A)') 'plot "'//trim(tmpfile)// &
+      '" u 1:(rho($1,$2,$3)):(drho($1,$2,$3,$4)) w yerrorbars pt 5 ps 0.7 lc rgb "dark-turquoise" title "rho XY", \'
+   write(iu,'(A)') '     "'//trim(tmpfile)// &
+      '" u 1:(rho($1,$5,$6)):(drho($1,$5,$6,$7)) w yerrorbars pt 7 ps 0.7 lc rgb "dark-orange" title "rho YX"'
+
+   ! ============================================================
+   ! Panel (1,2): rho_a diagonal
+   ! ============================================================
+   write(iu,'(A)') 'set title "Diagonal: rho_a XX & YY"'
+   write(iu,'(A)') 'plot "'//trim(tmpfile)// &
+      '" u 1:(rho($1,$8,$9)):(drho($1,$8,$9,$10)) w yerrorbars pt 5 ps 0.7 lc rgb "dark-turquoise" title "rho XX", \'
+   write(iu,'(A)') '     "'//trim(tmpfile)// &
+      '" u 1:(rho($1,$11,$12)):(drho($1,$11,$12,$13)) w yerrorbars pt 7 ps 0.7 lc rgb "dark-orange" title "rho YY"'
+
+   ! ============================================================
+   ! Panel (2,1): fase off-diagonal
+   ! ============================================================
+   write(iu,'(A)') 'unset logscale y'
+   write(iu,'(A)') 'set yrange [-200:200]'
+   write(iu,'(A)') 'set ytics 45'
+      write(iu,'(A)') 'set grid xtics noytics lt 0 lw 0.5 lc rgb "gray70"'
+
+   write(iu,'(A)') 'set ylabel "Phase (deg)"'
+   write(iu,'(A)') 'set title "Off-diagonal: Phase XY & YX"'
+   ! Linea de referencia en fase = 0
+   write(iu,'(A)') 'set arrow 1 from 1e-3,0 to 1e3,0 nohead lt 0 lw 0.8 lc rgb "gray50"'
+   write(iu,'(A)') 'plot "'//trim(tmpfile)// &
+      '" u 1:(phase($2,$3)):(dphase($2,$3,$4)) w yerrorbars pt 5 ps 0.7 lc rgb "dark-turquoise" title "Phase XY", \'
+   write(iu,'(A)') '     "'//trim(tmpfile)// &
+      '" u 1:(phase($5,$6)):(dphase($5,$6,$7)) w yerrorbars pt 7 ps 0.7 lc rgb "dark-orange" title "Phase YX"'
+
+   ! ============================================================
+   ! Panel (2,2): fase diagonal
+   ! ============================================================
+   write(iu,'(A)') 'set title "Diagonal: Phase XX & YY"'
+   write(iu,'(A)') 'plot "'//trim(tmpfile)// &
+      '" u 1:(phase($8,$9)):(dphase($8,$9,$10)) w yerrorbars pt 5 ps 0.7 lc rgb "dark-turquoise" title "Phase XX", \'
+   write(iu,'(A)') '     "'//trim(tmpfile)// &
+      '" u 1:(phase($11,$12)):(dphase($11,$12,$13)) w yerrorbars pt 7 ps 0.7 lc rgb "dark-orange" title "Phase YY"'
+
+   ! Limpiar arrow
+   write(iu,'(A)') 'unset arrow 1'
+   write(iu,'(A)') 'unset multiplot'
+   close(iu)
+
+   ! Ejecutar gnuplot
+   call execute_command_line('gnuplot '//trim(gpfile), &
+                              wait=.true., exitstat=stat)
+   if (stat /= 0) then
+      print*, 'ERROR: gnuplot fallo para sitio ', trim(site_name)
+      error stop
+   end if
+
+   ! Borrar temporales
+   call execute_command_line('rm -f '//trim(tmpfile)//' '//trim(gpfile), &
+                              wait=.true., exitstat=stat)
+
+   ! print*, '✅ PDF generado: ', trim(pdffile)
+
+end subroutine plot_edi_site
 end module geo_utils
 
