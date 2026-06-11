@@ -6,10 +6,11 @@ program femtic_mesh_driver
 
    implicit none
 
+   TYPE(MeshSettings)      :: settings
+   type(ObserveSettings)   :: siteSettings
+   type(Coast_Line)        :: coastLine
    type(GlobalRefinement)  :: globRefi
    type(ParamRefinement)   :: paramRefi
-   type(Coast_Line)        :: coastLine
-   TYPE(MeshSettings)      :: settings
    type(ModelRegion)       :: regions
 
    ! Control parameters
@@ -23,7 +24,7 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !     Read input configutation file
    !---------------------------------------------------
-   call read_set_femtic('set_meshtran.io', settings, coastLine, paramRefi, globRefi, regions)
+   call read_set_femtic('set_meshtran.io', settings, siteSettings ,coastLine, paramRefi, globRefi, regions)
    !---------------------------------------------------
    !     Check if Read input configutation file
    !---------------------------------------------------
@@ -32,17 +33,17 @@ program femtic_mesh_driver
    !     Read Digital Elevation Model and output in km
    !---------------------------------------------------
    call read_dem(settings, coastLine, dem_x, dem_y, dem_z, z_topo, z_bathy, n_dem)
-
+   
    print*, ' '
    print*, 'Y este es n_dem en main despues de read_dem ', n_dem
    print*, ' '
    print*, ' - - - - - - -  -  -  -  -  -  -  -  -  -  '
-
-
+  
+   
    print*, "Esto es DEM en km UTM "
    print'(4(F15.5))', dem_x(1), dem_y(1), dem_z(1)!, dem_z(1) / 1.0d3
-
-
+   
+   
    allocate (dem_x_km(n_dem), dem_y_km(n_dem), dem_z_km(n_dem))
    !Due to elevation in DEM is in mts, then after here the dem_z is in km
 
@@ -60,7 +61,7 @@ program femtic_mesh_driver
    !---------------------------------------------------
    !       Converting EDI's from latlong to UTM in Km 
    !---------------------------------------------------
-   call read_edi_files(edi_files, n_edi_files, edi_id, site_x, site_y, edi_elev)
+   call read_edi_files(siteSettings, edi_files, n_edi_files, edi_id, site_x, site_y, edi_elev)
    ! print*, "METROS Esto es coord UTM EDi fIles"
    ! print'(4(F15.5))', site_x(1), site_y(1), edi_elev(1), EDI_elev(1) / 1.0d3
 
@@ -105,17 +106,6 @@ program femtic_mesh_driver
    !---------------------------------------------------
    call recenter_all(coastLine, n_edi_files, n_dem, x0, y0, site_x_km, site_y_km, site_z_km, dem_x_km, dem_y_km, dem_z_km)
 
-      print*, ' '
-      print*, ' '
-      print*, ' '
-      print*, ' Despues de centarar desde main'
-      print*, coastLine%x(1:5)
-      print*, ' '
-      print*, coastLine%y(1:5)
-      print*, ' '
-      print*, ' '
-      print*, ' '
-
    print*, "METROS Esto es DEM in UTM despues de CENTRAR"
    print'(4(F15.5))', dem_x_km(1), dem_y_km(1), dem_z_km(1)
 
@@ -125,7 +115,6 @@ program femtic_mesh_driver
    ! call snap_sites_to_dem(site_x_km, site_y_km, site_z_km, n_sites, dem_x, dem_y, dem_z_km, n_dem, fix_elev_site)
    ! print'(A,f15.5)', "Esto es despues de snap_sites: ", fix_elev_site(2)
    print*,' '
-   ! call check_domain(dem_x_km, dem_y_km, settings)
    ! call check_domain(dem_x_km, dem_y_km, dem_z_km,  n_dem, settings)
 
    ! !Write files in mesh coordinates centered at anchor point
@@ -179,17 +168,18 @@ contains
    !=========================================================
    !=======
    !=========================================================
-   subroutine read_set_femtic(fname, OBJsettings, OBJcoastLine, OBJparamRefi, OBJglobRefi, OBJmodReg)
+   subroutine read_set_femtic(fname, OBJsettings, OBJsiteSettings, OBJcoastLine, OBJparamRefi, OBJglobRefi, OBJmodReg)
 
       use class_CoastLine
 
       implicit none
 
       character(len=*), intent(in) :: fname
-      type(GlobalRefinement),    INTENT(INOUT) :: OBJglobRefi
-      type(ParamRefinement),     INTENT(INout) :: OBJparamRefi
-      type(MeshSettings),        intent(inout) :: OBJsettings
-      type(ModelRegion),         INTENT(INOUT) :: OBJmodReg
+      type(GlobalRefinement),    INTENT(INOUT)  :: OBJglobRefi
+      type(ObserveSettings), intent(inout)      :: OBJsiteSettings
+      type(ParamRefinement),     INTENT(INout)  :: OBJparamRefi
+      type(MeshSettings),        intent(inout)  :: OBJsettings
+      type(ModelRegion),         INTENT(INOUT)  :: OBJmodReg
       type(Coast_Line),           INTENT(INOUT) :: OBJcoastLine
 
       character(len=256) :: line, key, val
@@ -232,6 +222,13 @@ contains
 
          case ('TOPO_FILE')
             OBJsettings%topography_file = trim(val)
+
+         case ('KEYWORD_LAT')
+            OBJsiteSettings%lat_keyword = trim(val)
+
+         case ('KEYWORD_LONG')
+            OBJsiteSettings%long_keyword = trim(val)
+            
 
          case ('BATHY_FILE')
             OBJsettings%bathymetry_file = trim(val)
@@ -1544,11 +1541,12 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine read_edi_files(EDIfiles, n, EDIid, EDIcoordX, EDIcoordY, EDIelev)
+   subroutine read_edi_files(OBJsites, EDIfiles, n, EDIid, EDIcoordX, EDIcoordY, EDIelev)
       use geo_utils, only:lat_long_to_UTM_km
 
       implicit none
 
+      type(ObserveSettings), intent(in) :: OBJsites
       integer,          intent(in)     :: n
       character(len=*), intent(in)     :: EDIfiles(n)
       character(len=*), intent(out)    :: EDIid(n)
@@ -1559,7 +1557,6 @@ end subroutine surface_ellipsoids
       character(len=512)               :: line
 
       logical:: found_id, found_lat, found_lon, found_elev
-
       do i = 1, n
 
          found_id = .false.
@@ -1582,14 +1579,14 @@ end subroutine surface_ellipsoids
             end if
 
             ! if (index(line, 'REFLAT=') > 0) then
-            if (index(line, 'LAT=') > 0) then
+            if (index(line, trim(OBJsites%lat_keyword)//"=") > 0) then
                ! print*, line
                call parse_ref_value(line, EDIlat(i))
                found_lat = .true.
                ! print*,EDIlat
             end if
 
-            if (index(line, 'LONG=') > 0) then
+            if (index(line, trim(OBJsites%long_keyword)//"=") > 0) then
             ! if (index(line, 'REFLONG=') > 0) then
                call parse_ref_value(line, EDIlong(i))
                found_lon = .true.
@@ -1666,12 +1663,6 @@ end subroutine surface_ellipsoids
       ! print*,zCenter
       ! pause
 
-      print*, ' '
-      print*, ' Antes de centarar '
-      print*, OBJcoastLine%x(1:5)
-      print*, ' '
-      print*, OBJcoastLine%y(1:5)
-
       siteCord_x(:) = siteCord_x(:) - xCenter
       siteCord_y(:) = siteCord_y(:) - yCenter
       siteCord_z(:) = siteCord_z(:) !- zCenter
@@ -1681,11 +1672,15 @@ end subroutine surface_ellipsoids
       demY(:) = demY(:) - yCenter
       demZ(:) = demZ(:)! - zCenter
 
-      OBJcoastLine%x = OBJcoastLine%x - xCenter
-      OBJcoastLine%y = OBJcoastLine%y - yCenter
 
-      OBJcoastLine%closedX = OBJcoastLine%closedX - xCenter
-      OBJcoastLine%closedY = OBJcoastLine%closedY - yCenter
+      if(OBJcoastLine%has_sea .eq. "yes")then
+         OBJcoastLine%x = OBJcoastLine%x - xCenter
+         OBJcoastLine%y = OBJcoastLine%y - yCenter
+         OBJcoastLine%closedX = OBJcoastLine%closedX - xCenter
+         OBJcoastLine%closedY = OBJcoastLine%closedY - yCenter
+      else
+         continue
+      endif
 
 
       ! do i = 1, nDEM
@@ -2740,7 +2735,7 @@ end subroutine surface_ellipsoids
 
       integer :: stat, iu_in, iu_out, k
       logical :: ex, found_part4
-      character(len=512) :: line
+      character(len=512) :: line, cmd
 
       ! -----------------------------
       ! 1. Ir a buildMesh
@@ -2766,35 +2761,73 @@ end subroutine surface_ellipsoids
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 1 failed'
       end if
+      write(cmd,'(A)') 'cp preprocessing/buildMesh/makeTetraMesh.log preprocessing/buildMesh/makeTetra_stp1.log'
+      call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+      if (stat /= 0) then
+         error stop 'ERROR: log of makeTetraMesh step 1 have not generated'
+      end if
       call execute_command_line('echo "done..." && sleep 1')
       print*, ' '
 
-      call execute_command_line('echo "step 2 --> Building 2D mesh..."')
+
+
+      !-------
+      !--- Step 2
+      !-------
+      call execute_command_line('echo "step 2 --> Generating 2D mesh..."')
       call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 2', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 2 failed'
       end if
+      write(cmd,'(A)') 'cp preprocessing/buildMesh/makeTetraMesh.log preprocessing/buildMesh/makeTetra_stp2.log'
+      call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+      if (stat /= 0) then
+         error stop 'ERROR: log of makeTetraMesh step 2 have not generated'
+      end if
       call execute_command_line('echo "done..." && sleep 1')
       print*, ' '
 
-      call execute_command_line('echo "step 3 --> Interpolating altitudes"')
+
+
+      !-------
+      !--- Step 3
+      !-------
+      call execute_command_line('echo "step 3 --> Interpolating altitudes of 2D mesh"')
       call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 3', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 3 failed'
       end if
+      write(cmd,'(A)') 'cp preprocessing/buildMesh/makeTetraMesh.log preprocessing/buildMesh/makeTetra_stp3.log'
+      call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+      if (stat /= 0) then
+         error stop 'ERROR: log of makeTetraMesh step 3 have not generated'
+      end if
       call execute_command_line('echo "done..." && sleep 1')
       print*, ' '
 
-      call execute_command_line('echo "step 4 --> Making surface mesh"')
+
+
+      !-------
+      !--- Step 4
+      !-------
+      call execute_command_line('echo "step 4 --> Building surface mesh"')
       call execute_command_line('cd preprocessing/buildMesh && makeTetraMesh -stp 4', wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: makeTetraMesh step 4 failed'
       end if
+      write(cmd,'(A)') 'cp preprocessing/buildMesh/makeTetraMesh.log preprocessing/buildMesh/makeTetra_stp4.log'
+      call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
+      if (stat /= 0) then
+         error stop 'ERROR: log of makeTetraMesh step 4 have not generated'
+      end if
       call execute_command_line('echo "done..." && sleep 1')
+
+
 
       ! -----------------------------
       ! 4. Verificar output.poly
       ! -----------------------------
+      call EXECUTE_COMMAND_LINE('rm preprocessing/buildMesh/makeTetraMesh.log')
       inquire (file='preprocessing/buildMesh/output.poly', exist=ex)
       if (.not. ex) stop 'ERROR: output.poly was not generated'
 
@@ -2880,7 +2913,7 @@ end subroutine surface_ellipsoids
       call execute_command_line('echo "running tetgen --> 📐 Building 2D Mesh including topography"')
       ! call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq3.0/0 output.poly > meshtranTetGen.log 2>&1', &
       ! call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAak -S0  output.poly > meshtran_S0_TetGen.log 2>&1', &
-      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq -S0 output.poly > meshtranTetGen.log 2>&1', &
+      call execute_command_line('cd preprocessing/buildMesh && tetgen -nVpYAakq -S0 output.poly > MeshTranTetGen.log 2>&1', &
                                 wait=.true., exitstat=stat)
       if (stat /= 0) then
          error stop 'ERROR: tetgen execution failed'
@@ -2912,9 +2945,10 @@ end subroutine surface_ellipsoids
       print*, ' '
          write (*, '(A,I0)') '      🔁 Refinement : ', r
          ! makeMtr output.$r
-     write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && makeMtr output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
+         write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && makeMtr output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in makeMtr'
+
          ! tetgen ... output.$r
          write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && tetgen -nmpYVrAakq5.0/0 output.', &
             r, ' >> meshtranRefinementTetGen.log 2>&1'
