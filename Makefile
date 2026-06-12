@@ -25,15 +25,24 @@ $(SRC_DIR)/meshTranFemtic.f90
 #
 FFLAGS = -diag-disable=10448
 FFLAGS += -stand f08
-FFLAGS += -g -debug all
+FFLAGS += -g -debug all -traceback 
 FFLAGS += -warn all
 FFLAGS += -O0 -heap-arrays
-FFLAGS += -check all -traceback -mcmodel large -fp-stack-check -check noarg_temp_created
+FFLAGS += -check all -mcmodel large -fp-stack-check -check noarg_temp_created
 FFLAGS += -qmkl
 FFLAGS += -module $(MOD_DIR)
 
+
 # Default target
 all: $(TARGET)
+	@echo " "
+	@echo "  |================================| "
+	@echo "  |                                | "
+	@echo "  |             MeshTran           | "
+	@echo "  |      compilation completed     | "
+	@echo "  |                                | "
+	@echo "  |================================| "
+	@echo "   "
 
 $(MOD_DIR):
 	@mkdir -p $(MOD_DIR)
@@ -46,5 +55,11 @@ $(TARGET): $(MOD_DIR) $(SRC)
 clean:
 	@rm -rf $(MOD_DIR) 
 	@rm meshTran
+	@echo ' '
+	@echo '  * * * * * * * * * * * * * * '
+	@echo ' '
+	@echo ' -    Everything is clean    -'
+	@echo ' '
+	@echo '  * * * * * * * * * * * * * * '
 
 .PHONY: all clean

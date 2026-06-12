@@ -34,12 +34,6 @@ program femtic_mesh_driver
    !---------------------------------------------------
    call read_dem(settings, coastLine, dem_x, dem_y, dem_z, z_topo, z_bathy, n_dem)
    
-   print*, ' '
-   print*, 'Y este es n_dem en main despues de read_dem ', n_dem
-   print*, ' '
-   print*, ' - - - - - - -  -  -  -  -  -  -  -  -  -  '
-  
-   
    print*, "Esto es DEM en km UTM "
    print'(4(F15.5))', dem_x(1), dem_y(1), dem_z(1)!, dem_z(1) / 1.0d3
    
@@ -118,12 +112,12 @@ program femtic_mesh_driver
    ! call check_domain(dem_x_km, dem_y_km, dem_z_km,  n_dem, settings)
 
    ! !Write files in mesh coordinates centered at anchor point
-   call generate_observe_dat(edi_files, n_edi_files, site_x_km, site_y_km)
+   call generate_observe_dat(siteSettings, edi_files, n_edi_files, site_x_km, site_y_km)
    call define_analysis_domain(settings)
 
 
-   call write_topography(settings, coastline%has_sea , dem_x_km, dem_y_km, z_topo, n_dem)
-   call write_bathymetry(settings, coastLine%has_sea , dem_x_km, dem_y_km, z_bathy, n_dem)
+   call write_topography(settings, dem_x_km, dem_y_km, z_topo, n_dem)
+   call write_bathymetry(settings, dem_x_km, dem_y_km, z_bathy, n_dem)
    call write_coast_line(settings, coastLine )
    ! print*,' '
    ! print*,' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
@@ -223,13 +217,6 @@ contains
          case ('TOPO_FILE')
             OBJsettings%topography_file = trim(val)
 
-         case ('KEYWORD_LAT')
-            OBJsiteSettings%lat_keyword = trim(val)
-
-         case ('KEYWORD_LONG')
-            OBJsiteSettings%long_keyword = trim(val)
-            
-
          case ('BATHY_FILE')
             OBJsettings%bathymetry_file = trim(val)
 
@@ -238,7 +225,6 @@ contains
 
          case ('HAS_SEA')
             OBJcoastLine%has_sea = trim(val)
-            ! read (val, *) OBJcoastLine%has_sea
 
          case ('SEA_LEVEL')
             read (val, *) OBJcoastLine%sea_level
@@ -266,6 +252,26 @@ contains
 
          case ('PAD_Y')
             read (val, *) OBJsettings%pad_y
+         
+
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+            ! = = = =           EDI files keyword and error           = = = =
+            ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+         case ('IN_DIAG_ERR')
+            read (val, *) OBJsiteSettings%in_diag
+
+         case ('OFF_DIAG_ERR')
+            read (val, *) OBJsiteSettings%off_diag
+
+         case ('ERROR_TREATMENT')
+            OBJsiteSettings%error_tratement = trim(val)
+
+         case ('KEYWORD_LAT')
+            OBJsiteSettings%lat_keyword = trim(val)
+
+         case ('KEYWORD_LONG')
+            OBJsiteSettings%long_keyword = trim(val)
+            
 
             ! = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
             ! = = = = refinement for sites at the surface and control = = = =
@@ -427,8 +433,41 @@ contains
 !=========================================================
 !=======
 !=========================================================
-   subroutine generate_observe_dat(EDIfiles, n_files, site_x, site_y)
+   function get_site_name(filepath) result(site_name)
+      !
+      ! Extrae el nombre del sitio del path completo del EDI
+      ! Ejemplo: preprocessing/edi_files/GV001.edi → GV001
+      !
       implicit none
+      character(len=*),  intent(in) :: filepath
+      character(len=256)            :: site_name
+      integer :: k, p
+
+      ! 1. Quitar path — buscar ultimo '/'
+      p = 0
+      do k = len_trim(filepath), 1, -1
+         if (filepath(k:k) == '/') then
+            p = k
+            exit
+         end if
+      end do
+      site_name = filepath(p+1:len_trim(filepath))
+
+      ! 2. Quitar extension .edi
+      k = index(site_name, '.edi')
+      if (k > 0) site_name = site_name(1:k-1)
+
+   end function get_site_name
+!=========================================================
+!=======
+!=========================================================
+   subroutine generate_observe_dat(OBJobserveSettings, EDIfiles, n_files, site_x, site_y)
+
+      use geo_utils, only: write_edi_site_tmp, plot_edi_site
+
+      implicit none
+
+      type(ObserveSettings), intent(in) :: OBJobserveSettings
       integer, intent(in) :: n_files
       character(len=*), intent(in) :: EDIfiles(n_files)
       real(dp), intent(in) :: site_x(n_files), site_y(n_files)
@@ -508,11 +547,24 @@ contains
 
          ! 6. Apply conjugate to accomplish FEMTIC time dependence exp(-iωt)
          call apply_complex_conjugate(nf, zi)
-         ! 6. Calcular Error Floor (basado en el 5% y 20%)
-         call apply_error_floor(nf, zr, zi, sdSI, zerr)
+
+
+         select case (trim(OBJobserveSettings%error_tratement))
+            case ("floor")
+               ! 7. Calcular Error Floor (basado en el 5% y 20%)
+               call apply_error_floor(OBJobserveSettings, nf, zr, zi, sdSI, zerr)
+         
+            case("assigned")
+               ! 7. Calcular Error Floor (basado en el 5% y 20%)
+               call assign_percent_error(OBJobserveSettings, nf,zr,zi, zerr)
+            
+            case default
+               print*, 'Error: error_tratement in input file must be floor or assigned'
+               ERROR STOP
+         end select
          ! ---------------------------------
 
-         ! 7. Lógica de Subsampling
+         ! 8. Lógica de Subsampling
          mask = .true.    ! Por defecto todas se quedan
          nf_final = nf ! Por defecto el número final es el del EDI
 
@@ -528,13 +580,13 @@ contains
             end do
          end if
 
-         ! 8. Escritura condicionada
+         ! 9. Escritura condicionada
          ! Si nf_final es 0 porque el rango fue muy estricto, avisar
          if (nf_final == 0) then
             print *, "Aviso: Estación ", trim(EDIfiles(i)), " no tiene frecuencias en el rango."
          end if
 
-         ! 9. Escribir bloque de estación en observe.dat
+         ! 10. Escribir bloque de estación en observe.dat
          ! Formato: ID_est, ID_H_field, X, Y (en km o m según tu malla)
          write (unit_out, '(I6, I6, 1x, 2F12.5)') i, i, site_x(i), site_y(i)
          write (unit_out, '(I6)') nf_final
@@ -545,16 +597,15 @@ contains
                ! Error = sqrt(Varianza)
                write (unit_out, '(F12.5, 1x, 16(1x, ES12.5))') &
                   freq(j), &
-                  zr(j, 1), zi(j, 1), zr(j, 2), zi(j, 2), &
-                  zr(j, 3), zi(j, 3), zr(j, 4), zi(j, 4), &
-                  zerr(j, 1), zerr(j, 1), & ! Error XX (R e I)
-                  zerr(j, 2), zerr(j, 2), & ! Error XY
-                  zerr(j, 3), zerr(j, 3), & ! Error YX
-                  zerr(j, 4), zerr(j, 4)   ! Error YY
+                  zr(j, 1), zi(j, 1), zr(j, 2), zi(j, 2), zr(j, 3), zi(j, 3), zr(j, 4), zi(j, 4), &
+                  zerr(j, 1), zerr(j, 1), zerr(j, 2), zerr(j, 2), &
+                  zerr(j, 3), zerr(j, 3), zerr(j, 4), zerr(j, 4)   ! Error YY
             end if
          end do
 
          ! deallocate (freq, zr, zi, zvar, mask)
+         call write_edi_site_tmp('/tmp/'//trim(get_site_name(EDIfiles(i)))//'.dat', nf, freq, zr, zi, zerr, mask)
+         call plot_edi_site(get_site_name(EDIfiles(i)))
          deallocate (freq, zr, zi, zvar, zerr, sdSI, mask)
          close (unit_in)
 
@@ -599,7 +650,7 @@ contains
       sd_sigma = sqrt(zvar)
 
       mu0 = 4.0d0*PI*1.0E-7
-      scale_factor = mu0*1.0E3  ! De mV/km/nT a V/m / A/m
+      scale_factor = mu0*1.0E3  ! De   mV/km/nT   a   (V/m) / (A/m)
 
       zr = zr*scale_factor
       zi = zi*scale_factor
@@ -607,13 +658,23 @@ contains
 
    end subroutine convert_EDI_file_units
 !=========================================================
+!=======
 !===========================================================
-   subroutine apply_error_floor(nf, zr, zi, SD, zerr)
+   subroutine apply_error_floor(OBJobserveSettings, nf, zr, zi, SD, zerr)
+
+      implicit none
+
+      type(ObserveSettings), intent(in) :: OBJobserveSettings
       integer, intent(in) :: nf
       real(dp), intent(in) :: zr(nf, 4), zi(nf, 4), SD(nf, 4)
-      real(dp)              :: amp_xy, amp_yx, amp_ref
+      real(dp)              :: amp_xy, amp_yx, amp_ref, err_in, err_off
       real(dp), intent(out) :: zerr(nf, 4)
       integer  :: j
+
+
+
+      err_in  = REAL(OBJobserveSettings%in_diag , kind(1.e0)) /100.0d0
+      err_off = REAL(OBJobserveSettings%off_diag, kind(1.e0)) /100.0d0
 
       do j = 1, nf
          ! 1. Calculamos la amplitud individual de las componentes principales
@@ -624,12 +685,43 @@ contains
          amp_ref = sqrt(amp_xy*amp_yx)
 
          ! Aplicamos los porcentajes de acuerdo al manual/femticPy
-         zerr(j, 1) = max(SD(j, 1), amp_ref*0.20d0)  ! INdiag  ZXX (20%)
-         zerr(j, 2) = max(SD(j, 2), amp_ref*0.05d0)  ! OFFdiag ZXY (5%)
-         zerr(j, 3) = max(SD(j, 3), amp_ref*0.05d0)  ! OFFdiag ZYX (5%)
-         zerr(j, 4) = max(SD(j, 4), amp_ref*0.20d0)  ! INdiag  ZYY (20%)
+         zerr(j, 1) = max(SD(j, 1), amp_ref * err_in )  ! INdiag  ZXX (20%)
+         zerr(j, 2) = max(SD(j, 2), amp_ref * err_off)  ! OFFdiag ZXY (5%)
+         zerr(j, 3) = max(SD(j, 3), amp_ref * err_off)  ! OFFdiag ZYX (5%)
+         zerr(j, 4) = max(SD(j, 4), amp_ref * err_in )  ! INdiag  ZYY (20%)
       end do
    end subroutine apply_error_floor
+!=========================================================
+!=======
+!===========================================================
+   subroutine assign_percent_error(OBJobserveSettings, nf, zr, zi, zerr)
+      implicit none
+
+      type(ObserveSettings), intent(in) :: OBJobserveSettings
+      integer, intent(in) :: nf
+      real(dp), intent(in) :: zr(nf, 4), zi(nf, 4)
+      real(dp)              :: amp_xy, amp_yx, amp_xx, amp_yy, err_in, err_off
+      real(dp), intent(out) :: zerr(nf, 4)
+      integer  :: j
+
+      err_in  = REAL(OBJobserveSettings%in_diag , kind(1.e0)) /100.0d0
+      err_off = REAL(OBJobserveSettings%off_diag, kind(1.e0)) /100.0d0
+
+      do j = 1, nf
+         ! 1. Calculamos la amplitud individual de todas lascomponentes
+         amp_xx = sqrt(zr(j, 1)**2 + zi(j, 1)**2)
+         amp_xy = sqrt(zr(j, 2)**2 + zi(j, 2)**2)
+         amp_yx = sqrt(zr(j, 3)**2 + zi(j, 3)**2)
+         amp_yy = sqrt(zr(j, 4)**2 + zi(j, 4)**2)
+
+
+         ! Aplicamos los porcentajes de acuerdo al manual/femticPy
+         zerr(j, 1) = amp_xx * err_in   ! INdiag  ZXX (20%)
+         zerr(j, 2) = amp_xy * err_off  ! OFFdiag ZXY (5%)
+         zerr(j, 3) = amp_yx * err_off  ! OFFdiag ZYX (5%)
+         zerr(j, 4) = amp_yy * err_in   ! INdiag  ZYY (20%)
+      end do
+   end subroutine assign_percent_error
 !=========================================================
 !=======
 !=========================================================
@@ -975,14 +1067,6 @@ end subroutine surface_ellipsoids
             end do
 10          rewind (iu)
 
-      PRINT*, ' '
-      PRINT*, ' '
-      PRINT*, ' '
-            print*, "Esto es nDEMpoints dentro de read_dem            ", nDEMpoints
-
-      PRINT*, ' '
-      PRINT*, ' '
-      PRINT*, ' '
             allocate (long(nDEMpoints), lat(nDEMpoints), elev(nDEMpoints))
             do i = 1, nDEMpoints
                read (iu, *) longg, latt, elevv
@@ -1060,7 +1144,7 @@ end subroutine surface_ellipsoids
             ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
             allocate(is_land(nDEMpoints))
 
-            call ray_casting(CoastLineOBJ%closedX, CoastLineOBJ%closedY, CoastLineOBJ%npoinclose, x, y, z, nDEMpoints, is_land)
+            call ray_casting(CoastLineOBJ%closedX, CoastLineOBJ%closedY, CoastLineOBJ%npoinclose, x, y, nDEMpoints, is_land)
 
             ! Paso 3: corregir elevaciones ambiguas
             do i = 1, nDEMpoints
@@ -1090,9 +1174,6 @@ end subroutine surface_ellipsoids
       end select
 
       !At the end of this routine, the DEM and Coast Line are in KM UTM and both x points to North
-      print*, "Size de topo", size(topo)
-      print*, "Size de bathy", size(bathy)
-
    end subroutine read_dem
 !=========================================================
 !=======
@@ -1751,12 +1832,12 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine snap_sites_to_dem(siteX, siteY, siteZ, Nsites, DEMcorX, DEMcorY, DEMcorZ, NDEM, fix_elev_site)
+   subroutine snap_sites_to_dem(siteX, siteY, Nsites, DEMcorX, DEMcorY, DEMcorZ, NDEM, fix_elev_site)
 
       use mesh_config
       implicit none
       integer, intent(in):: Nsites, NDEM
-      real(dp), intent(in):: siteX(Nsites), siteY(Nsites), siteZ(Nsites)
+      real(dp), intent(in):: siteX(Nsites), siteY(Nsites)
       real(dp), intent(in):: DEMcorX(NDEM), DEMcorY(NDEM), DEMcorZ(NDEM)
       real(dp), allocatable, dimension(:), intent(out):: fix_elev_site
 
@@ -1888,11 +1969,9 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_topography(OBJsettings, has_sea, x, y, z, n)
+   subroutine write_topography(OBJsettings, x, y, z, n)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
-
-      character(len=5), intent(in) :: has_sea
 
       integer, intent(in)     :: n
       real(dp), intent(in)    :: x(n), y(n), z(n)
@@ -1903,28 +1982,20 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
       do i = 1, n
-         ! if (z(i) .gt. 0.00) then
-            ! Caso SIN mar: todo es tierra
             write (iu, '(3F15.5)') x(i), y(i), z(i)
-         ! else
-            ! Caso CON mar
-            ! write (iu, '(3F15.5)') x(i), y(i), z(i)
-         ! end if
       end do
       close (iu)
    end subroutine
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_bathymetry(OBJsettings, has_sea, x, y, z, npoints)
+   subroutine write_bathymetry(OBJsettings, x, y, z, npoints)
 
       implicit none
       TYPE(MeshSettings), INTENT(IN) :: OBJsettings
 
-      character(len=5), intent(in) :: has_sea
 
       real(dp), intent(in):: x(:), y(:), z(:)
-      ! real(dp), INTENT(INOUT) :: z(:)
       integer, intent(in):: npoints
       integer:: j, iu
 
@@ -1932,12 +2003,7 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%bathymetry_file, status='replace')
       do j = 1, npoints
-         ! if (z(j) .gt. 0.00) then
-            ! Caso SIN mar: no hay batimetría
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
-         ! else
-            ! write (iu, '(3F15.5)') x(j), y(j), z(j)
-         ! end if
       end do
       close (iu)
    end subroutine
@@ -1963,7 +2029,7 @@ end subroutine surface_ellipsoids
       type(Coast_Line),     INTENT(IN) :: OBJcoastLine
       character(len=20) :: plot_file, plot_mtif
 
-      integer:: iu, i , iiu
+      integer:: iu, i 
 
 
       plot_file = OBJsettings%coastLine_file
@@ -2559,8 +2625,8 @@ end subroutine surface_ellipsoids
 
       select case (check)
       case ("native")
-         print *, "No mesh convertion, building native mesh"
-         print *, '  - -  - - - -  -- - - - - - - -  - - - - - - - - - - - - - '
+         print *, "  No mesh convertion, building native (default) mesh"
+         print *, '  - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
          print *, ' ' 
 
       case ("external")
@@ -2945,7 +3011,8 @@ end subroutine surface_ellipsoids
       print*, ' '
          write (*, '(A,I0)') '      🔁 Refinement : ', r
          ! makeMtr output.$r
-         write (cmd, '(A,I0, A)') 'cd preprocessing/buildMesh/refinement && makeMtr output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
+         write (cmd, '(A,I0, A)')&
+         'cd preprocessing/buildMesh/refinement && makeMtr output.', r, ' >> meshtranRefinementTetGen.log 2>&1'
          call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
          if (stat /= 0) error stop 'ERROR in makeMtr'
 

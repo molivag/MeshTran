@@ -88,6 +88,8 @@ contains
       integer                          :: stat, best_id, iu, i
       real(dp) :: longg, latt
 
+      print*, ' '
+      print*, '- - - -'
       print *, 'Extracting MAIN coast line from DEM 🗾'
       DEM_file = OBJsettings%dem_file
       DEM_file = trim(DEM_file)
@@ -121,13 +123,11 @@ contains
       !step -- 3
       !Buscar en el archivo temporal con las cotas z=0, la de mayor numero de puntos y extraer su id
       call get_main_coastline_id(full_path, tmpfile, best_id, pointsCoastLine)
-      print *, best_id
 
       ! Paso 4: con el id obtenido, extraer solo esa linea
       write (cmd, '(A,I0,A)') &
          'cd preprocessing/DEM/coast_line_'//trim(folder)// &
          ' && ogr2ogr -f "ESRI Shapefile" coastline_main.shp '//'coastline.shp -where "ID = ', best_id, '" '
-      print '(A,I0,A)', cmd
 
       call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
       if (stat /= 0) error stop 'ERROR in extracting main coastline step 4 in extract_coastLine'
@@ -182,6 +182,7 @@ contains
       current_id = 0
 
       fname = trim(coast_line_path)//"/"//tmpfile
+      print*, ' '
       print *, 'Esto es el folder en get_main_coastline ', trim(fname)
       open (newunit=unit, file=trim(fname), status='old', iostat=ios, action='read')
       if (ios /= 0) then
@@ -216,6 +217,7 @@ contains
       write (*, '(A,I0,A,I0,A)') &
          ' >> Costa principal: ID=', best_id, &
          ' con ', max_pts, ' puntos'
+      print*, ' '
 
    end subroutine get_main_coastline_id
    !!=========================================================
@@ -453,6 +455,7 @@ contains
          close_to = "north"
       end if
      
+      print*, ' '
       print *, "Closing coastline toward :", trim(close_to)
      
       ! ============================================================
