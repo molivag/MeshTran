@@ -35,6 +35,14 @@ FFLAGS += -module $(MOD_DIR)
 
 # Default target
 all: $(TARGET)
+	@echo " "
+	@echo "  |================================| "
+	@echo "  |                                | "
+	@echo "  |             MeshTran           | "
+	@echo "  |      compilation completed     | "
+	@echo "  |                                | "
+	@echo "  |================================| "
+	@echo "   "
 
 $(MOD_DIR):
 	@mkdir -p $(MOD_DIR)
@@ -47,5 +55,11 @@ $(TARGET): $(MOD_DIR) $(SRC)
 clean:
 	@rm -rf $(MOD_DIR) 
 	@rm meshTran
+	@echo ' '
+	@echo '  * * * * * * * * * * * * * * '
+	@echo ' '
+	@echo ' -    Everything is clean    -'
+	@echo ' '
+	@echo '  * * * * * * * * * * * * * * '
 
 .PHONY: all clean

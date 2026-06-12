@@ -34,12 +34,6 @@ program femtic_mesh_driver
    !---------------------------------------------------
    call read_dem(settings, coastLine, dem_x, dem_y, dem_z, z_topo, z_bathy, n_dem)
    
-   print*, ' '
-   print*, 'Y este es n_dem en main despues de read_dem ', n_dem
-   print*, ' '
-   print*, ' - - - - - - -  -  -  -  -  -  -  -  -  -  '
-  
-   
    print*, "Esto es DEM en km UTM "
    print'(4(F15.5))', dem_x(1), dem_y(1), dem_z(1)!, dem_z(1) / 1.0d3
    
@@ -122,8 +116,8 @@ program femtic_mesh_driver
    call define_analysis_domain(settings)
 
 
-   call write_topography(settings, coastline%has_sea , dem_x_km, dem_y_km, z_topo, n_dem)
-   call write_bathymetry(settings, coastLine%has_sea , dem_x_km, dem_y_km, z_bathy, n_dem)
+   call write_topography(settings, dem_x_km, dem_y_km, z_topo, n_dem)
+   call write_bathymetry(settings, dem_x_km, dem_y_km, z_bathy, n_dem)
    call write_coast_line(settings, coastLine )
    ! print*,' '
    ! print*,' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
@@ -558,7 +552,7 @@ contains
          select case (trim(OBJobserveSettings%error_tratement))
             case ("floor")
                ! 7. Calcular Error Floor (basado en el 5% y 20%)
-               call apply_error_floor(nf, zr, zi, sdSI, zerr)
+               call apply_error_floor(OBJobserveSettings, nf, zr, zi, sdSI, zerr)
          
             case("assigned")
                ! 7. Calcular Error Floor (basado en el 5% y 20%)
@@ -666,12 +660,21 @@ contains
 !=========================================================
 !=======
 !===========================================================
-   subroutine apply_error_floor(nf, zr, zi, SD, zerr)
+   subroutine apply_error_floor(OBJobserveSettings, nf, zr, zi, SD, zerr)
+
+      implicit none
+
+      type(ObserveSettings), intent(in) :: OBJobserveSettings
       integer, intent(in) :: nf
       real(dp), intent(in) :: zr(nf, 4), zi(nf, 4), SD(nf, 4)
-      real(dp)              :: amp_xy, amp_yx, amp_ref
+      real(dp)              :: amp_xy, amp_yx, amp_ref, err_in, err_off
       real(dp), intent(out) :: zerr(nf, 4)
       integer  :: j
+
+
+
+      err_in  = REAL(OBJobserveSettings%in_diag , kind(1.e0)) /100.0d0
+      err_off = REAL(OBJobserveSettings%off_diag, kind(1.e0)) /100.0d0
 
       do j = 1, nf
          ! 1. Calculamos la amplitud individual de las componentes principales
@@ -682,10 +685,10 @@ contains
          amp_ref = sqrt(amp_xy*amp_yx)
 
          ! Aplicamos los porcentajes de acuerdo al manual/femticPy
-         zerr(j, 1) = max(SD(j, 1), amp_ref*0.20d0)  ! INdiag  ZXX (20%)
-         zerr(j, 2) = max(SD(j, 2), amp_ref*0.05d0)  ! OFFdiag ZXY (5%)
-         zerr(j, 3) = max(SD(j, 3), amp_ref*0.05d0)  ! OFFdiag ZYX (5%)
-         zerr(j, 4) = max(SD(j, 4), amp_ref*0.20d0)  ! INdiag  ZYY (20%)
+         zerr(j, 1) = max(SD(j, 1), amp_ref * err_in )  ! INdiag  ZXX (20%)
+         zerr(j, 2) = max(SD(j, 2), amp_ref * err_off)  ! OFFdiag ZXY (5%)
+         zerr(j, 3) = max(SD(j, 3), amp_ref * err_off)  ! OFFdiag ZYX (5%)
+         zerr(j, 4) = max(SD(j, 4), amp_ref * err_in )  ! INdiag  ZYY (20%)
       end do
    end subroutine apply_error_floor
 !=========================================================
@@ -1064,14 +1067,6 @@ end subroutine surface_ellipsoids
             end do
 10          rewind (iu)
 
-      PRINT*, ' '
-      PRINT*, ' '
-      PRINT*, ' '
-            print*, "Esto es nDEMpoints dentro de read_dem            ", nDEMpoints
-
-      PRINT*, ' '
-      PRINT*, ' '
-      PRINT*, ' '
             allocate (long(nDEMpoints), lat(nDEMpoints), elev(nDEMpoints))
             do i = 1, nDEMpoints
                read (iu, *) longg, latt, elevv
@@ -1149,7 +1144,7 @@ end subroutine surface_ellipsoids
             ! call debug_coastline(CoastLineOBJ%y, CoastLineOBJ%x, CoastLineOBJ%npoints) 
             allocate(is_land(nDEMpoints))
 
-            call ray_casting(CoastLineOBJ%closedX, CoastLineOBJ%closedY, CoastLineOBJ%npoinclose, x, y, z, nDEMpoints, is_land)
+            call ray_casting(CoastLineOBJ%closedX, CoastLineOBJ%closedY, CoastLineOBJ%npoinclose, x, y, nDEMpoints, is_land)
 
             ! Paso 3: corregir elevaciones ambiguas
             do i = 1, nDEMpoints
@@ -1179,9 +1174,6 @@ end subroutine surface_ellipsoids
       end select
 
       !At the end of this routine, the DEM and Coast Line are in KM UTM and both x points to North
-      print*, "Size de topo", size(topo)
-      print*, "Size de bathy", size(bathy)
-
    end subroutine read_dem
 !=========================================================
 !=======
@@ -1840,12 +1832,12 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine snap_sites_to_dem(siteX, siteY, siteZ, Nsites, DEMcorX, DEMcorY, DEMcorZ, NDEM, fix_elev_site)
+   subroutine snap_sites_to_dem(siteX, siteY, Nsites, DEMcorX, DEMcorY, DEMcorZ, NDEM, fix_elev_site)
 
       use mesh_config
       implicit none
       integer, intent(in):: Nsites, NDEM
-      real(dp), intent(in):: siteX(Nsites), siteY(Nsites), siteZ(Nsites)
+      real(dp), intent(in):: siteX(Nsites), siteY(Nsites)
       real(dp), intent(in):: DEMcorX(NDEM), DEMcorY(NDEM), DEMcorZ(NDEM)
       real(dp), allocatable, dimension(:), intent(out):: fix_elev_site
 
@@ -1977,11 +1969,9 @@ end subroutine surface_ellipsoids
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_topography(OBJsettings, has_sea, x, y, z, n)
+   subroutine write_topography(OBJsettings, x, y, z, n)
       implicit none
       type(MeshSettings), INTENT(IN) :: OBJsettings
-
-      character(len=5), intent(in) :: has_sea
 
       integer, intent(in)     :: n
       real(dp), intent(in)    :: x(n), y(n), z(n)
@@ -1992,28 +1982,20 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%topography_file, status='replace', action='write')
       do i = 1, n
-         ! if (z(i) .gt. 0.00) then
-            ! Caso SIN mar: todo es tierra
             write (iu, '(3F15.5)') x(i), y(i), z(i)
-         ! else
-            ! Caso CON mar
-            ! write (iu, '(3F15.5)') x(i), y(i), z(i)
-         ! end if
       end do
       close (iu)
    end subroutine
 !=========================================================
 !=======
 !=========================================================
-   subroutine write_bathymetry(OBJsettings, has_sea, x, y, z, npoints)
+   subroutine write_bathymetry(OBJsettings, x, y, z, npoints)
 
       implicit none
       TYPE(MeshSettings), INTENT(IN) :: OBJsettings
 
-      character(len=5), intent(in) :: has_sea
 
       real(dp), intent(in):: x(:), y(:), z(:)
-      ! real(dp), INTENT(INOUT) :: z(:)
       integer, intent(in):: npoints
       integer:: j, iu
 
@@ -2021,12 +2003,7 @@ end subroutine surface_ellipsoids
 
       open (newunit=iu, file=trim(outdir)//OBJsettings%bathymetry_file, status='replace')
       do j = 1, npoints
-         ! if (z(j) .gt. 0.00) then
-            ! Caso SIN mar: no hay batimetría
             write (iu, '(3F15.5)') x(j), y(j), z(j) !-1.0_dp/1000.0d0
-         ! else
-            ! write (iu, '(3F15.5)') x(j), y(j), z(j)
-         ! end if
       end do
       close (iu)
    end subroutine
@@ -2052,7 +2029,7 @@ end subroutine surface_ellipsoids
       type(Coast_Line),     INTENT(IN) :: OBJcoastLine
       character(len=20) :: plot_file, plot_mtif
 
-      integer:: iu, i , iiu
+      integer:: iu, i 
 
 
       plot_file = OBJsettings%coastLine_file
@@ -2648,8 +2625,8 @@ end subroutine surface_ellipsoids
 
       select case (check)
       case ("native")
-         print *, "No mesh convertion, building native mesh"
-         print *, '  - -  - - - -  -- - - - - - - -  - - - - - - - - - - - - - '
+         print *, "  No mesh convertion, building native (default) mesh"
+         print *, '  - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
          print *, ' ' 
 
       case ("external")

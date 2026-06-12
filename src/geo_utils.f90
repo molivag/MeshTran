@@ -9,6 +9,70 @@ module geo_utils
 !=========================================================
 !=======
 !=========================================================trendline
+   ! subroutine validate_regions(OBJregions, OBJsoastLine)
+   !
+   !    use class_CoastLine
+   !    use mesh_entities
+   !
+   !    implicit none
+   !
+   !    type(ModelRegions), intent(in) :: OBJregions
+   !    type(Coast_Line), INTENT(IN) :: OBJsoastLine
+   !
+   !
+   !    integer :: n_negative, n_positive, i
+   !
+   !    n_negative = count(OBJregions%rep_partition < 0)
+   !    n_positive = count(OBJregions%rep_partition > 0)
+   !
+   !    select case (OBJsoastLine%has_sea)
+   !
+   !    case ("no")
+   !    if (OBJregions%n_regions /= 2) then
+   !       print*, 'ERROR [Regions]: Land-only model must have exactly 2 regions.'
+   !       print*, '       Found: ', OBJregions%n_regions
+   !       error stop
+   !    end if
+   !    if (n_negative /= 1) then
+   !       print*, 'ERROR [Regions]: Land-only model must have exactly 1 air region'
+   !       print*, '       (REP_PARTITION < 0). Found: ', n_negative
+   !       error stop
+   !    end if
+   !    if (n_positive /= 1) then
+   !       print*, 'ERROR [Regions]: Land-only model must have exactly 1 subsurface region'
+   !       print*, '       (REP_PARTITION > 0). Found: ', n_positive
+   !       error stop
+   !    end if
+   !    print*, 'OK [Regions]: Land-only model — 1 air + 1 subsurface. OK'
+   !
+   !    case ("yes")
+   !    if (OBJregions%n_regions /= 3) then
+   !       print*, 'ERROR [Regions]: Land-sea model must have exactly 3 regions.'
+   !       print*, '       Found: ', OBJregions%n_regions
+   !       error stop
+   !    end if
+   !    if (n_negative /= 2) then
+   !       print*, 'ERROR [Regions]: Land-sea model must have exactly 2 air/sea regions'
+   !       print*, '       (REP_PARTITION < 0). Found: ', n_negative
+   !       error stop
+   !    end if
+   !    if (n_positive /= 1) then
+   !       print*, 'ERROR [Regions]: Land-sea model must have exactly 1 subsurface region'
+   !       print*, '       (REP_PARTITION > 0). Found: ', n_positive
+   !       error stop
+   !    end if
+   !    print*, 'OK [Regions]: Land-sea model — 2 air/sea + 1 subsurface. OK'
+   !
+   !    case default
+   !    print*, 'ERROR [Regions]: has_sea must be "yes" or "no". Got: ', OBJsoastLine%has_sea
+   !    error stop
+   !
+   !    end select
+   !
+   ! end subroutine validate_regions
+!=========================================================
+!=======
+!=========================================================trendline
    subroutine lat_long_to_UTM_km(lat, lon, n_points, east_km, north_km)
 
       implicit none
@@ -169,7 +233,7 @@ call execute_command_line(trim(cmd), wait=.true., exitstat=stat)
 !=========================================================
 !=======
 !=========================================================
-subroutine ray_casting(coast_x, coast_y, n_coast, dem_x, dem_y, dem_z, n_dem, is_land)
+subroutine ray_casting(coast_x, coast_y, n_coast, dem_x, dem_y, n_dem, is_land)
 
    implicit none
 
@@ -178,7 +242,6 @@ subroutine ray_casting(coast_x, coast_y, n_coast, dem_x, dem_y, dem_z, n_dem, is
    integer,          intent(in)  :: n_dem
    real(dp),         intent(in)  :: dem_x(n_dem)   ! Norte (km)
    real(dp),         intent(in)  :: dem_y(n_dem)   ! Este  (km)
-   real(dp),         intent(in)  :: dem_z(n_dem)   ! Elevacion (km)
    logical,          intent(out) :: is_land(n_dem)
 
    integer  :: i, j, cnt
@@ -186,7 +249,7 @@ subroutine ray_casting(coast_x, coast_y, n_coast, dem_x, dem_y, dem_z, n_dem, is
    real(dp), parameter :: eps = 1.0d-10
 
    print*, " "
-   print*, " ---> Running Ray Casting algorithm to clasify DEM"
+   print*, " ---> Running Ray Casting algorithm to clasify Land-Sea points"
    print*, " "
 
    do i = 1, n_dem
@@ -303,98 +366,6 @@ end subroutine write_edi_site_tmp
 !=========================================================
 !=======
 !=========================================================
-! subroutine plot_edi_site(site_name)
-!    implicit none
-!    character(len=*), intent(in) :: site_name
-!
-!    integer             :: stat, iu
-!    character(len=512)  :: tmpfile, pdffile, gpfile
-!
-!    tmpfile = '/tmp/'//trim(site_name)//'.dat'
-!    pdffile = 'preprocessing/edi_sites/'//trim(site_name)//'.pdf'
-!    gpfile  = '/tmp/'//trim(site_name)//'.gp'
-!
-!    call execute_command_line('mkdir -p preprocessing/edi_sites', &
-!                               wait=.true., exitstat=stat)
-!
-!    !----------------------------------------------------------
-!    ! Escribir script gnuplot a archivo temporal
-!    !----------------------------------------------------------
-!    open(newunit=iu, file=trim(gpfile), status='replace')
-!
-!    write(iu,'(A)') 'set terminal pdfcairo enhanced color size 12,8 font "Helvetica,10"'
-!    write(iu,'(A)') 'set output "'//trim(pdffile)//'"'
-!    write(iu,'(A)') 'mu0 = 1.2566370614e-6'
-!    write(iu,'(A)') 'rho(f,Re,Im) = (1.0/(2.0*pi*f*mu0)) * (Re**2 + Im**2)'
-!    write(iu,'(A)') 'phase(Re,Im) = atan2(Im,Re) * 180.0/pi'
-!       !para las error bars
-! write(iu,'(A)') 'drho(f,Re,Im,SE) = (1.0/(pi*f*mu0)) * sqrt(Re**2+Im**2) * SE'
-! write(iu,'(A)') 'dphase(Re,Im,SE) = (SE / sqrt(Re**2+Im**2)) * 180.0/pi'
-!
-!    write(iu,'(A)') 'set multiplot layout 2,2 title "'//trim(site_name)//'"'
-!    write(iu,'(A)') 'set logscale x'
-!    write(iu,'(A)') 'set yrange [1e3:1e-3]'
-!    write(iu,'(A)') 'set xlabel "Frequency (Hz)"'
-!    write(iu,'(A)') 'set format x "10^{%T}"'
-!
-!    ! Panel (1,1): rho_a off-diagonal
-!    write(iu,'(A)') 'set logscale y'
-!    write(iu,'(A)') 'set yrange [0.5:3500]'
-!    write(iu,'(A)') 'set ylabel "$rho_a$ (Ohm·m)"'
-!    write(iu,'(A)') 'set title "Off-diagonal: rho_a XY & YX"'
-!
-!    ! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(rho($1,$2,$3)) w lp pt 4 lc rgb "purple" title "rho XY", \'
-!    ! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(rho($1,$5,$6)) w lp pt 6 lc rgb "red" title "rho YX"'
-! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(rho($1,$2,$3)):(drho($1,$2,$3,$4)) w yerrorbars pt 4 lc rgb "purple" title "rho XY", \'
-! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(rho($1,$5,$6)):(drho($1,$5,$6,$7)) w yerrorbars pt 6 lc rgb "red" title "rho YX"'
-!
-!    ! Panel (1,2): rho_a diagonal
-!    write(iu,'(A)') 'set title "Diagonal: rho_a XX & YY"'
-!    ! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(rho($1,$8,$9)) w lp pt 4 lc rgb "purple" title "rho XX", \'
-!    ! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(rho($1,$11,$12)) w lp pt 6 lc rgb "red" title "rho YY"'
-! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(rho($1,$8,$9)):(drho($1,$8,$9,$10)) w yerrorbars pt 4 lc rgb "purple" title "rho XX", \'
-! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(rho($1,$11,$12)):(drho($1,$11,$12,$13)) w yerrorbars pt 6 lc rgb "red" title "rho YY"'
-!
-!    ! Panel (2,1): fase off-diagonal
-!    write(iu,'(A)') 'unset logscale y'
-!    write(iu,'(A)') 'set yrange [-180:180]'
-!    write(iu,'(A)') 'set ytics 45'
-!    write(iu,'(A)') 'set ylabel "Phase (deg)"'
-!    write(iu,'(A)') 'set title "Off-diagonal: Phase XY & YX"'
-!    ! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(phase($2,$3)) w lp pt 4 lc rgb "purple" title "Phase XY", \'
-!    ! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(phase($5,$6)) w lp pt 6 lc rgb "red" title "Phase YX"'
-! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(phase($2,$3)):(dphase($2,$3,$4)) w yerrorbars pt 4 lc rgb "purple" title "Phase XY", \'
-! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(phase($5,$6)):(dphase($5,$6,$7)) w yerrorbars pt 6 lc rgb "red" title "Phase YX"'
-!
-!    ! Panel (2,2): fase diagonal
-!    write(iu,'(A)') 'set title "Diagonal: Phase XX & YY"'
-!    ! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(phase($8,$9)) w lp pt 4 lc rgb "purple" title "Phase XX", \'
-!    ! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(phase($11,$12)) w lp pt 6 lc rgb "red" title "Phase YY"'
-! write(iu,'(A)') 'plot "'//trim(tmpfile)//'" u 1:(phase($8,$9)):(dphase($8,$9,$10)) w yerrorbars pt 4 lc rgb "purple" title "Phase XX", \'
-! write(iu,'(A)') '     "'//trim(tmpfile)//'" u 1:(phase($11,$12)):(dphase($11,$12,$13)) w yerrorbars pt 6 lc rgb "red" title "Phase YY"'
-!
-!    write(iu,'(A)') 'unset multiplot'
-!    close(iu)
-!
-!    !----------------------------------------------------------
-!    ! Ejecutar gnuplot
-!    !----------------------------------------------------------
-!    call execute_command_line('gnuplot '//trim(gpfile), &
-!                               wait=.true., exitstat=stat)
-!    if (stat /= 0) then
-!       print*, 'ERROR: gnuplot fallo para sitio ', trim(site_name)
-!       error stop
-!    end if
-!
-!    !----------------------------------------------------------
-!    ! Borrar temporales
-!    !----------------------------------------------------------
-!    call execute_command_line('rm -f '//trim(tmpfile)//' '//trim(gpfile), &
-!                               wait=.true., exitstat=stat)
-!
-!    ! print*, '✅ PDF generado: ', trim(pdffile)
-!
-! end subroutine plot_edi_site
 subroutine plot_edi_site(site_name)
    implicit none
    character(len=*), intent(in) :: site_name

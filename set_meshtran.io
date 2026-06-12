@@ -9,10 +9,9 @@ MESH_NATURE = native
 THREADS = 18
 
 DEM_FILE = gebco.xyz
-__DEM_FILE = GabbsValley_large.xyz
 DEM_LatLon = yes
 DEM_UNITS = meters                    !meters or kilometers, assumming elevation in meters
-HAS_SEA = no
+HAS_SEA = yes
 SEA_LEVEL = 0.0
 
 
@@ -20,12 +19,12 @@ TOPO_FILE = gabbs_valley.dat
 BATHY_FILE = bathymetry_GV.dat
 COSLI_FILE = coast_line.dat
 
-XMIN_DOM = -200.0
-XMAX_DOM =  200.0
-YMIN_DOM = -200.0
-YMAX_DOM =  200.0
+XMIN_DOM = -60.0
+XMAX_DOM = 140.0
+YMIN_DOM = -180.0
+YMAX_DOM = 120.0
 ZMIN_DOM = -150.0
-ZMAX_DOM =  300.0
+ZMAX_DOM = 300.0
 
 PAD_X = 5.0
 PAD_Y = 5.0
@@ -89,14 +88,14 @@ FRAC_SKIN_DEPTH = 5.55    !No quiero que el tamaño de elemento (o parámetro) s
 
 ## => Regions Atributes in the model
 ELLIPSES = 9 
-REGIONS = 2
+REGIONS = 3
 
-LOCATION = 0.0 0.0 -20.0    0.0 0.0 45.0       	  !xyz xyz  xyz
-ID_REGION =     10               30	    		         !reg1 reg2
-RHO_REGIONS =   1.0e9            1.0e2		             !rho1 rho2
+LOCATION = 0.0 0.0 -20.0    -50 50 1.0      0.0 0.0 45.0       	  !xyz xyz  xyz
+ID_REGION =     10            12                 30	    		         !reg1 reg2
+RHO_REGIONS =   1.0e9         0.3              1.0e2		             !rho1 rho2
 
-REP_PARTITION = -1               9           
-FIX_RESISTIVITY = 1              0           
+REP_PARTITION = -1       -1         9           
+FIX_RESISTIVITY = 1      -1         0           
 
 ## => Refinement for mesh parameter based on spheres
 PARAM_ESFER = 2
