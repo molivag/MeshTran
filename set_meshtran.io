@@ -2,21 +2,21 @@
 *                                                                 *
 * MeshTran configuration file                                     *
 *                                                                 *
-*                                        MAOG    Bcn, Mzo. 2026   *
+*                                        MAOG    Bcn, jun. 2026   *
 *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
 MESH_NATURE = native
 THREADS = 18
 
-DEM_FILE = gebco.xyz
+DEM_FILE = digital_elevation_model.xyz
 DEM_LatLon = yes
 DEM_UNITS = meters                    !meters or kilometers, assumming elevation in meters
 HAS_SEA = yes
 SEA_LEVEL = 0.0
 
 
-TOPO_FILE = gabbs_valley.dat 
-BATHY_FILE = bathymetry_GV.dat
+TOPO_FILE = topography_name_file.dat 
+BATHY_FILE = bathymetry_name_file.dat
 COSLI_FILE = coast_line.dat
 
 XMIN_DOM = -60.0
@@ -83,7 +83,7 @@ TARGET_DEPTH = 15
 BKGRD_RHO = 100
 F_MIN_HZ = 0.001
 
-FRAC_SKIN_DEPTH = 5.55    !No quiero que el tamaño de elemento (o parámetro) sea mayor que el 25% de la skin depth
+FRAC_SKIN_DEPTH = 5.55    !El tamaño de elemento (o parámetro) sera menor que el 25% de la skin depth
 
 
 ## => Regions Atributes in the model
